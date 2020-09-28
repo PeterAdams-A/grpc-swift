@@ -42,6 +42,9 @@ let package = Package(
 
     // Argument parsing
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "0.3.0"),
+
+    // Service Lifecycle.
+    .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", .branch("main")),
   ],
   targets: [
     // The main GRPC module.
@@ -246,24 +249,15 @@ let package = Package(
       path: "Sources/Examples/RouteGuide/Server"
     ),
 
-   /* .target(
-        name: "QPSModel",
-        dependencies: [
-            "GRPC",
-            "NIO",
-            "NIOHTTP1",
-            "SwiftProtobuf",
-        ],
-        path: "Sources/QPSBenchmark/Model"
-    ),*/
-
     // QPS benchmark worker.
     .target(
         name: "QPSBenchmark",
         dependencies: [
           "GRPC",
           "NIO",
-        //  "QPSModel",
+          .product(name: "ArgumentParser", package: "swift-argument-parser"),
+          "Logging",
+          "Lifecycle",
         ],
         path: "Sources/QPSBenchmark"
     ),
