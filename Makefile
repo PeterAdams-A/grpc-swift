@@ -102,20 +102,6 @@ ROUTE_GUIDE_GRPC=$(ROUTE_GUIDE_PROTO:.proto=.grpc.swift)
 .PHONY:
 generate-route-guide: ${ROUTE_GUIDE_PB} ${ROUTE_GUIDE_GRPC}
 
-QBS_PROTO=Sources/QPSBenchmark/Model/benchmark_service.proto \
-          Sources/QPSBenchmark/Model/payloads.proto \
-          Sources/QPSBenchmark/Model/control.proto \
-          Sources/QPSBenchmark/Model/stats.proto \
-          Sources/QPSBenchmark/Model/core_stats.proto \
-          Sources/QPSBenchmark/Model/worker_service.proto \
-          Sources/QPSBenchmark/Model/messages.proto
-QBS_PB=$(QBS_PROTO:.proto=.pb.swift)
-QBS_GRPC=$(QBS_PROTO:.proto=.grpc.swift)
-
-# Generate the protobufs for the QPS benchmarking worker.
-.PHONY:
-generate-qps-worker: ${QBS_PB} ${QBS_GRPC}
-
 ### Testing ####################################################################
 
 # Normal test suite.

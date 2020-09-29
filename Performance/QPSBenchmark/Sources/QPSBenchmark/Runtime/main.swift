@@ -30,7 +30,7 @@ final class QPSWorkerApp: ParsableCommand {
     var driverPort: Int
 
     @Option(name: .shortAndLong, help: "Port for operation as a server.")
-    var serverPort: Int
+    var serverPort: Int?
 
     @Option(name: .shortAndLong, help: "Credential type for communication with driver.")
     var credentialType: String = "boo"  // TODO:  Default to kInsecureCredentialsType
@@ -62,13 +62,13 @@ final class QPSWorkerApp: ParsableCommand {
          srand(seed());
          */
 
-        var qpsWorker = QPSWorker(driverPort: self.driverPort,
-                                  serverPort: self.serverPort,
-                                  credentialType: self.credentialType)
-        lifecycle.register(label: "QPSWorker", start: .sync {
-            qpsWorker.start()
-        }, shutdown: .sync {
-            try qpsWorker.syncShutdown()
+        let qpsWorker = QPSWorker(driverPort: self.driverPort)
+                                 // serverPort: self.serverPort,
+                                 // credentialType: self.credentialType)
+        qpsWorker.start()
+        // TODO:  Investigate eventloop future compatibility mode.
+        lifecycle.registerShutdown(label: "QPSWorker", .sync {
+            () in try qpsWorker.syncShutdown()
         })
 
         lifecycle.start { error in
@@ -82,7 +82,11 @@ final class QPSWorkerApp: ParsableCommand {
         }
 
         // TODO:  Termination from internally.
-        lifecycle.wait()
+        // lifecycle.wait()
+        // Wait on the server's `onClose` future to stop the program from exiting.
+        _ = try qpsWorker.server?.flatMap {
+            $0.onClose
+        }.wait()
     }
 }
 

@@ -193,14 +193,17 @@ extension Grpc_Testing_ServerStats: SwiftProtobuf.Message, SwiftProtobuf._Messag
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularDoubleField(value: &self.timeElapsed)
-      case 2: try decoder.decodeSingularDoubleField(value: &self.timeUser)
-      case 3: try decoder.decodeSingularDoubleField(value: &self.timeSystem)
-      case 4: try decoder.decodeSingularUInt64Field(value: &self.totalCpuTime)
-      case 5: try decoder.decodeSingularUInt64Field(value: &self.idleCpuTime)
-      case 6: try decoder.decodeSingularUInt64Field(value: &self.cqPollCount)
-      case 7: try decoder.decodeSingularMessageField(value: &self._coreStats)
+      case 1: try { try decoder.decodeSingularDoubleField(value: &self.timeElapsed) }()
+      case 2: try { try decoder.decodeSingularDoubleField(value: &self.timeUser) }()
+      case 3: try { try decoder.decodeSingularDoubleField(value: &self.timeSystem) }()
+      case 4: try { try decoder.decodeSingularUInt64Field(value: &self.totalCpuTime) }()
+      case 5: try { try decoder.decodeSingularUInt64Field(value: &self.idleCpuTime) }()
+      case 6: try { try decoder.decodeSingularUInt64Field(value: &self.cqPollCount) }()
+      case 7: try { try decoder.decodeSingularMessageField(value: &self._coreStats) }()
       default: break
       }
     }
@@ -253,9 +256,12 @@ extension Grpc_Testing_HistogramParams: SwiftProtobuf.Message, SwiftProtobuf._Me
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularDoubleField(value: &self.resolution)
-      case 2: try decoder.decodeSingularDoubleField(value: &self.maxPossible)
+      case 1: try { try decoder.decodeSingularDoubleField(value: &self.resolution) }()
+      case 2: try { try decoder.decodeSingularDoubleField(value: &self.maxPossible) }()
       default: break
       }
     }
@@ -292,13 +298,16 @@ extension Grpc_Testing_HistogramData: SwiftProtobuf.Message, SwiftProtobuf._Mess
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeRepeatedUInt32Field(value: &self.bucket)
-      case 2: try decoder.decodeSingularDoubleField(value: &self.minSeen)
-      case 3: try decoder.decodeSingularDoubleField(value: &self.maxSeen)
-      case 4: try decoder.decodeSingularDoubleField(value: &self.sum)
-      case 5: try decoder.decodeSingularDoubleField(value: &self.sumOfSquares)
-      case 6: try decoder.decodeSingularDoubleField(value: &self.count)
+      case 1: try { try decoder.decodeRepeatedUInt32Field(value: &self.bucket) }()
+      case 2: try { try decoder.decodeSingularDoubleField(value: &self.minSeen) }()
+      case 3: try { try decoder.decodeSingularDoubleField(value: &self.maxSeen) }()
+      case 4: try { try decoder.decodeSingularDoubleField(value: &self.sum) }()
+      case 5: try { try decoder.decodeSingularDoubleField(value: &self.sumOfSquares) }()
+      case 6: try { try decoder.decodeSingularDoubleField(value: &self.count) }()
       default: break
       }
     }
@@ -347,9 +356,12 @@ extension Grpc_Testing_RequestResultCount: SwiftProtobuf.Message, SwiftProtobuf.
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularInt32Field(value: &self.statusCode)
-      case 2: try decoder.decodeSingularInt64Field(value: &self.count)
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.statusCode) }()
+      case 2: try { try decoder.decodeSingularInt64Field(value: &self.count) }()
       default: break
       }
     }
@@ -387,14 +399,17 @@ extension Grpc_Testing_ClientStats: SwiftProtobuf.Message, SwiftProtobuf._Messag
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularMessageField(value: &self._latencies)
-      case 2: try decoder.decodeSingularDoubleField(value: &self.timeElapsed)
-      case 3: try decoder.decodeSingularDoubleField(value: &self.timeUser)
-      case 4: try decoder.decodeSingularDoubleField(value: &self.timeSystem)
-      case 5: try decoder.decodeRepeatedMessageField(value: &self.requestResults)
-      case 6: try decoder.decodeSingularUInt64Field(value: &self.cqPollCount)
-      case 7: try decoder.decodeSingularMessageField(value: &self._coreStats)
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._latencies) }()
+      case 2: try { try decoder.decodeSingularDoubleField(value: &self.timeElapsed) }()
+      case 3: try { try decoder.decodeSingularDoubleField(value: &self.timeUser) }()
+      case 4: try { try decoder.decodeSingularDoubleField(value: &self.timeSystem) }()
+      case 5: try { try decoder.decodeRepeatedMessageField(value: &self.requestResults) }()
+      case 6: try { try decoder.decodeSingularUInt64Field(value: &self.cqPollCount) }()
+      case 7: try { try decoder.decodeSingularMessageField(value: &self._coreStats) }()
       default: break
       }
     }

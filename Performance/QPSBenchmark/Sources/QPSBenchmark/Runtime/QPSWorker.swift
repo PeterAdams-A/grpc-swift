@@ -15,27 +15,42 @@
  */
 
 import NIO
+import GRPC
+import Logging
 
-struct QPSWorker {
+class QPSWorker {
     var driverPort: Int
-    var serverPort: Int
-    var credentialType: String
+    //var serverPort: Int
+    //var credentialType: String
 
-    init(driverPort: Int, serverPort: Int, credentialType: String) {
+    init(driverPort: Int) { // , serverPort: Int, credentialType: String) {
         self.driverPort = driverPort
-        self.serverPort = serverPort
-        self.credentialType = credentialType
+        //self.serverPort = serverPort
+        //self.credentialType = credentialType
     }
+
+    let logger = Logger(label: "QPSWorker")
 
     var eventLoopGroup: MultiThreadedEventLoopGroup?
+    var server: EventLoopFuture<Server>?
 
-    mutating func start() {
+    func start() {
         precondition(self.eventLoopGroup == nil)
-        self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        self.logger.info("Starting")
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        self.eventLoopGroup = eventLoopGroup
+
+        let workerService = WorkerServiceImpl()
+
+        // Start the server.
+        self.server = Server.insecure(group: eventLoopGroup)
+          .withServiceProviders([workerService])
+            .bind(host: "localhost", port: self.driverPort)
     }
 
-    mutating func syncShutdown() throws {
+    func syncShutdown() throws {
         precondition(self.eventLoopGroup != nil)
+        self.logger.info("Stopping")
         try self.eventLoopGroup?.syncShutdownGracefully()
     }
 

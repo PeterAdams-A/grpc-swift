@@ -114,10 +114,22 @@ public struct Grpc_Testing_PayloadConfig {
 
   #if !swift(>=4.1)
     public static func ==(lhs: Grpc_Testing_PayloadConfig.OneOf_Payload, rhs: Grpc_Testing_PayloadConfig.OneOf_Payload) -> Bool {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch (lhs, rhs) {
-      case (.bytebufParams(let l), .bytebufParams(let r)): return l == r
-      case (.simpleParams(let l), .simpleParams(let r)): return l == r
-      case (.complexParams(let l), .complexParams(let r)): return l == r
+      case (.bytebufParams, .bytebufParams): return {
+        guard case .bytebufParams(let l) = lhs, case .bytebufParams(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.simpleParams, .simpleParams): return {
+        guard case .simpleParams(let l) = lhs, case .simpleParams(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.complexParams, .complexParams): return {
+        guard case .complexParams(let l) = lhs, case .complexParams(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
       default: return false
       }
     }
@@ -140,9 +152,12 @@ extension Grpc_Testing_ByteBufferParams: SwiftProtobuf.Message, SwiftProtobuf._M
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularInt32Field(value: &self.reqSize)
-      case 2: try decoder.decodeSingularInt32Field(value: &self.respSize)
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.reqSize) }()
+      case 2: try { try decoder.decodeSingularInt32Field(value: &self.respSize) }()
       default: break
       }
     }
@@ -175,9 +190,12 @@ extension Grpc_Testing_SimpleProtoParams: SwiftProtobuf.Message, SwiftProtobuf._
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularInt32Field(value: &self.reqSize)
-      case 2: try decoder.decodeSingularInt32Field(value: &self.respSize)
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.reqSize) }()
+      case 2: try { try decoder.decodeSingularInt32Field(value: &self.respSize) }()
       default: break
       }
     }
@@ -230,8 +248,11 @@ extension Grpc_Testing_PayloadConfig: SwiftProtobuf.Message, SwiftProtobuf._Mess
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1:
+      case 1: try {
         var v: Grpc_Testing_ByteBufferParams?
         if let current = self.payload {
           try decoder.handleConflictingOneOf()
@@ -239,7 +260,8 @@ extension Grpc_Testing_PayloadConfig: SwiftProtobuf.Message, SwiftProtobuf._Mess
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.payload = .bytebufParams(v)}
-      case 2:
+      }()
+      case 2: try {
         var v: Grpc_Testing_SimpleProtoParams?
         if let current = self.payload {
           try decoder.handleConflictingOneOf()
@@ -247,7 +269,8 @@ extension Grpc_Testing_PayloadConfig: SwiftProtobuf.Message, SwiftProtobuf._Mess
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.payload = .simpleParams(v)}
-      case 3:
+      }()
+      case 3: try {
         var v: Grpc_Testing_ComplexProtoParams?
         if let current = self.payload {
           try decoder.handleConflictingOneOf()
@@ -255,19 +278,29 @@ extension Grpc_Testing_PayloadConfig: SwiftProtobuf.Message, SwiftProtobuf._Mess
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.payload = .complexParams(v)}
+      }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every case branch when no optimizations are
+    // enabled. https://github.com/apple/swift-protobuf/issues/1034
     switch self.payload {
-    case .bytebufParams(let v)?:
+    case .bytebufParams?: try {
+      guard case .bytebufParams(let v)? = self.payload else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    case .simpleParams(let v)?:
+    }()
+    case .simpleParams?: try {
+      guard case .simpleParams(let v)? = self.payload else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    case .complexParams(let v)?:
+    }()
+    case .complexParams?: try {
+      guard case .complexParams(let v)? = self.payload else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)

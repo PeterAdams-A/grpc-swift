@@ -251,9 +251,18 @@ public struct Grpc_Testing_LoadParams {
 
   #if !swift(>=4.1)
     public static func ==(lhs: Grpc_Testing_LoadParams.OneOf_Load, rhs: Grpc_Testing_LoadParams.OneOf_Load) -> Bool {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch (lhs, rhs) {
-      case (.closedLoop(let l), .closedLoop(let r)): return l == r
-      case (.poisson(let l), .poisson(let r)): return l == r
+      case (.closedLoop, .closedLoop): return {
+        guard case .closedLoop(let l) = lhs, case .closedLoop(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.poisson, .poisson): return {
+        guard case .poisson(let l) = lhs, case .poisson(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
       default: return false
       }
     }
@@ -313,9 +322,18 @@ public struct Grpc_Testing_ChannelArg {
 
   #if !swift(>=4.1)
     public static func ==(lhs: Grpc_Testing_ChannelArg.OneOf_Value, rhs: Grpc_Testing_ChannelArg.OneOf_Value) -> Bool {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch (lhs, rhs) {
-      case (.strValue(let l), .strValue(let r)): return l == r
-      case (.intValue(let l), .intValue(let r)): return l == r
+      case (.strValue, .strValue): return {
+        guard case .strValue(let l) = lhs, case .strValue(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.intValue, .intValue): return {
+        guard case .intValue(let l) = lhs, case .intValue(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
       default: return false
       }
     }
@@ -529,9 +547,18 @@ public struct Grpc_Testing_ClientArgs {
 
   #if !swift(>=4.1)
     public static func ==(lhs: Grpc_Testing_ClientArgs.OneOf_Argtype, rhs: Grpc_Testing_ClientArgs.OneOf_Argtype) -> Bool {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch (lhs, rhs) {
-      case (.setup(let l), .setup(let r)): return l == r
-      case (.mark(let l), .mark(let r)): return l == r
+      case (.setup, .setup): return {
+        guard case .setup(let l) = lhs, case .setup(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.mark, .mark): return {
+        guard case .mark(let l) = lhs, case .mark(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
       default: return false
       }
     }
@@ -635,9 +662,18 @@ public struct Grpc_Testing_ServerArgs {
 
   #if !swift(>=4.1)
     public static func ==(lhs: Grpc_Testing_ServerArgs.OneOf_Argtype, rhs: Grpc_Testing_ServerArgs.OneOf_Argtype) -> Bool {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch (lhs, rhs) {
-      case (.setup(let l), .setup(let r)): return l == r
-      case (.mark(let l), .mark(let r)): return l == r
+      case (.setup, .setup): return {
+        guard case .setup(let l) = lhs, case .setup(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.mark, .mark): return {
+        guard case .mark(let l) = lhs, case .mark(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
       default: return false
       }
     }
@@ -714,49 +750,66 @@ public struct Grpc_Testing_Scenario {
   // methods supported on all messages.
 
   /// Human readable name for this scenario
-  public var name: String = String()
+  public var name: String {
+    get {return _storage._name}
+    set {_uniqueStorage()._name = newValue}
+  }
 
   /// Client configuration
   public var clientConfig: Grpc_Testing_ClientConfig {
-    get {return _clientConfig ?? Grpc_Testing_ClientConfig()}
-    set {_clientConfig = newValue}
+    get {return _storage._clientConfig ?? Grpc_Testing_ClientConfig()}
+    set {_uniqueStorage()._clientConfig = newValue}
   }
   /// Returns true if `clientConfig` has been explicitly set.
-  public var hasClientConfig: Bool {return self._clientConfig != nil}
+  public var hasClientConfig: Bool {return _storage._clientConfig != nil}
   /// Clears the value of `clientConfig`. Subsequent reads from it will return its default value.
-  public mutating func clearClientConfig() {self._clientConfig = nil}
+  public mutating func clearClientConfig() {_uniqueStorage()._clientConfig = nil}
 
   /// Number of clients to start for the test
-  public var numClients: Int32 = 0
+  public var numClients: Int32 {
+    get {return _storage._numClients}
+    set {_uniqueStorage()._numClients = newValue}
+  }
 
   /// Server configuration
   public var serverConfig: Grpc_Testing_ServerConfig {
-    get {return _serverConfig ?? Grpc_Testing_ServerConfig()}
-    set {_serverConfig = newValue}
+    get {return _storage._serverConfig ?? Grpc_Testing_ServerConfig()}
+    set {_uniqueStorage()._serverConfig = newValue}
   }
   /// Returns true if `serverConfig` has been explicitly set.
-  public var hasServerConfig: Bool {return self._serverConfig != nil}
+  public var hasServerConfig: Bool {return _storage._serverConfig != nil}
   /// Clears the value of `serverConfig`. Subsequent reads from it will return its default value.
-  public mutating func clearServerConfig() {self._serverConfig = nil}
+  public mutating func clearServerConfig() {_uniqueStorage()._serverConfig = nil}
 
   /// Number of servers to start for the test
-  public var numServers: Int32 = 0
+  public var numServers: Int32 {
+    get {return _storage._numServers}
+    set {_uniqueStorage()._numServers = newValue}
+  }
 
   /// Warmup period, in seconds
-  public var warmupSeconds: Int32 = 0
+  public var warmupSeconds: Int32 {
+    get {return _storage._warmupSeconds}
+    set {_uniqueStorage()._warmupSeconds = newValue}
+  }
 
   /// Benchmark time, in seconds
-  public var benchmarkSeconds: Int32 = 0
+  public var benchmarkSeconds: Int32 {
+    get {return _storage._benchmarkSeconds}
+    set {_uniqueStorage()._benchmarkSeconds = newValue}
+  }
 
   /// Number of workers to spawn locally (usually zero)
-  public var spawnLocalWorkerCount: Int32 = 0
+  public var spawnLocalWorkerCount: Int32 {
+    get {return _storage._spawnLocalWorkerCount}
+    set {_uniqueStorage()._spawnLocalWorkerCount = newValue}
+  }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _clientConfig: Grpc_Testing_ClientConfig? = nil
-  fileprivate var _serverConfig: Grpc_Testing_ServerConfig? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 /// A set of scenarios to be run with qps_json_driver
@@ -995,8 +1048,11 @@ extension Grpc_Testing_PoissonParams: SwiftProtobuf.Message, SwiftProtobuf._Mess
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularDoubleField(value: &self.offeredLoad)
+      case 1: try { try decoder.decodeSingularDoubleField(value: &self.offeredLoad) }()
       default: break
       }
     }
@@ -1044,8 +1100,11 @@ extension Grpc_Testing_LoadParams: SwiftProtobuf.Message, SwiftProtobuf._Message
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1:
+      case 1: try {
         var v: Grpc_Testing_ClosedLoopParams?
         if let current = self.load {
           try decoder.handleConflictingOneOf()
@@ -1053,7 +1112,8 @@ extension Grpc_Testing_LoadParams: SwiftProtobuf.Message, SwiftProtobuf._Message
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.load = .closedLoop(v)}
-      case 2:
+      }()
+      case 2: try {
         var v: Grpc_Testing_PoissonParams?
         if let current = self.load {
           try decoder.handleConflictingOneOf()
@@ -1061,17 +1121,25 @@ extension Grpc_Testing_LoadParams: SwiftProtobuf.Message, SwiftProtobuf._Message
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.load = .poisson(v)}
+      }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every case branch when no optimizations are
+    // enabled. https://github.com/apple/swift-protobuf/issues/1034
     switch self.load {
-    case .closedLoop(let v)?:
+    case .closedLoop?: try {
+      guard case .closedLoop(let v)? = self.load else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    case .poisson(let v)?:
+    }()
+    case .poisson?: try {
+      guard case .poisson(let v)? = self.load else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1094,10 +1162,13 @@ extension Grpc_Testing_SecurityParams: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularBoolField(value: &self.useTestCa)
-      case 2: try decoder.decodeSingularStringField(value: &self.serverHostOverride)
-      case 3: try decoder.decodeSingularStringField(value: &self.credType)
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.useTestCa) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.serverHostOverride) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.credType) }()
       default: break
       }
     }
@@ -1135,18 +1206,23 @@ extension Grpc_Testing_ChannelArg: SwiftProtobuf.Message, SwiftProtobuf._Message
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularStringField(value: &self.name)
-      case 2:
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try {
         if self.value != nil {try decoder.handleConflictingOneOf()}
         var v: String?
         try decoder.decodeSingularStringField(value: &v)
         if let v = v {self.value = .strValue(v)}
-      case 3:
+      }()
+      case 3: try {
         if self.value != nil {try decoder.handleConflictingOneOf()}
         var v: Int32?
         try decoder.decodeSingularInt32Field(value: &v)
         if let v = v {self.value = .intValue(v)}
+      }()
       default: break
       }
     }
@@ -1156,11 +1232,18 @@ extension Grpc_Testing_ChannelArg: SwiftProtobuf.Message, SwiftProtobuf._Message
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
     }
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every case branch when no optimizations are
+    // enabled. https://github.com/apple/swift-protobuf/issues/1034
     switch self.value {
-    case .strValue(let v)?:
+    case .strValue?: try {
+      guard case .strValue(let v)? = self.value else { preconditionFailure() }
       try visitor.visitSingularStringField(value: v, fieldNumber: 2)
-    case .intValue(let v)?:
+    }()
+    case .intValue?: try {
+      guard case .intValue(let v)? = self.value else { preconditionFailure() }
       try visitor.visitSingularInt32Field(value: v, fieldNumber: 3)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1257,26 +1340,29 @@ extension Grpc_Testing_ClientConfig: SwiftProtobuf.Message, SwiftProtobuf._Messa
     _ = _uniqueStorage()
     try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
       while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
         switch fieldNumber {
-        case 1: try decoder.decodeRepeatedStringField(value: &_storage._serverTargets)
-        case 2: try decoder.decodeSingularEnumField(value: &_storage._clientType)
-        case 3: try decoder.decodeSingularMessageField(value: &_storage._securityParams)
-        case 4: try decoder.decodeSingularInt32Field(value: &_storage._outstandingRpcsPerChannel)
-        case 5: try decoder.decodeSingularInt32Field(value: &_storage._clientChannels)
-        case 7: try decoder.decodeSingularInt32Field(value: &_storage._asyncClientThreads)
-        case 8: try decoder.decodeSingularEnumField(value: &_storage._rpcType)
-        case 10: try decoder.decodeSingularMessageField(value: &_storage._loadParams)
-        case 11: try decoder.decodeSingularMessageField(value: &_storage._payloadConfig)
-        case 12: try decoder.decodeSingularMessageField(value: &_storage._histogramParams)
-        case 13: try decoder.decodeRepeatedInt32Field(value: &_storage._coreList)
-        case 14: try decoder.decodeSingularInt32Field(value: &_storage._coreLimit)
-        case 15: try decoder.decodeSingularStringField(value: &_storage._otherClientApi)
-        case 16: try decoder.decodeRepeatedMessageField(value: &_storage._channelArgs)
-        case 17: try decoder.decodeSingularInt32Field(value: &_storage._threadsPerCq)
-        case 18: try decoder.decodeSingularInt32Field(value: &_storage._messagesPerStream)
-        case 19: try decoder.decodeSingularBoolField(value: &_storage._useCoalesceApi)
-        case 20: try decoder.decodeSingularInt32Field(value: &_storage._medianLatencyCollectionIntervalMillis)
-        case 21: try decoder.decodeSingularInt32Field(value: &_storage._clientProcesses)
+        case 1: try { try decoder.decodeRepeatedStringField(value: &_storage._serverTargets) }()
+        case 2: try { try decoder.decodeSingularEnumField(value: &_storage._clientType) }()
+        case 3: try { try decoder.decodeSingularMessageField(value: &_storage._securityParams) }()
+        case 4: try { try decoder.decodeSingularInt32Field(value: &_storage._outstandingRpcsPerChannel) }()
+        case 5: try { try decoder.decodeSingularInt32Field(value: &_storage._clientChannels) }()
+        case 7: try { try decoder.decodeSingularInt32Field(value: &_storage._asyncClientThreads) }()
+        case 8: try { try decoder.decodeSingularEnumField(value: &_storage._rpcType) }()
+        case 10: try { try decoder.decodeSingularMessageField(value: &_storage._loadParams) }()
+        case 11: try { try decoder.decodeSingularMessageField(value: &_storage._payloadConfig) }()
+        case 12: try { try decoder.decodeSingularMessageField(value: &_storage._histogramParams) }()
+        case 13: try { try decoder.decodeRepeatedInt32Field(value: &_storage._coreList) }()
+        case 14: try { try decoder.decodeSingularInt32Field(value: &_storage._coreLimit) }()
+        case 15: try { try decoder.decodeSingularStringField(value: &_storage._otherClientApi) }()
+        case 16: try { try decoder.decodeRepeatedMessageField(value: &_storage._channelArgs) }()
+        case 17: try { try decoder.decodeSingularInt32Field(value: &_storage._threadsPerCq) }()
+        case 18: try { try decoder.decodeSingularInt32Field(value: &_storage._messagesPerStream) }()
+        case 19: try { try decoder.decodeSingularBoolField(value: &_storage._useCoalesceApi) }()
+        case 20: try { try decoder.decodeSingularInt32Field(value: &_storage._medianLatencyCollectionIntervalMillis) }()
+        case 21: try { try decoder.decodeSingularInt32Field(value: &_storage._clientProcesses) }()
         default: break
         }
       }
@@ -1387,8 +1473,11 @@ extension Grpc_Testing_ClientStatus: SwiftProtobuf.Message, SwiftProtobuf._Messa
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularMessageField(value: &self._stats)
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._stats) }()
       default: break
       }
     }
@@ -1416,8 +1505,11 @@ extension Grpc_Testing_Mark: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularBoolField(value: &self.reset)
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.reset) }()
       default: break
       }
     }
@@ -1446,8 +1538,11 @@ extension Grpc_Testing_ClientArgs: SwiftProtobuf.Message, SwiftProtobuf._Message
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1:
+      case 1: try {
         var v: Grpc_Testing_ClientConfig?
         if let current = self.argtype {
           try decoder.handleConflictingOneOf()
@@ -1455,7 +1550,8 @@ extension Grpc_Testing_ClientArgs: SwiftProtobuf.Message, SwiftProtobuf._Message
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.argtype = .setup(v)}
-      case 2:
+      }()
+      case 2: try {
         var v: Grpc_Testing_Mark?
         if let current = self.argtype {
           try decoder.handleConflictingOneOf()
@@ -1463,17 +1559,25 @@ extension Grpc_Testing_ClientArgs: SwiftProtobuf.Message, SwiftProtobuf._Message
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.argtype = .mark(v)}
+      }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every case branch when no optimizations are
+    // enabled. https://github.com/apple/swift-protobuf/issues/1034
     switch self.argtype {
-    case .setup(let v)?:
+    case .setup?: try {
+      guard case .setup(let v)? = self.argtype else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    case .mark(let v)?:
+    }()
+    case .mark?: try {
+      guard case .mark(let v)? = self.argtype else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1505,19 +1609,22 @@ extension Grpc_Testing_ServerConfig: SwiftProtobuf.Message, SwiftProtobuf._Messa
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularEnumField(value: &self.serverType)
-      case 2: try decoder.decodeSingularMessageField(value: &self._securityParams)
-      case 4: try decoder.decodeSingularInt32Field(value: &self.port)
-      case 7: try decoder.decodeSingularInt32Field(value: &self.asyncServerThreads)
-      case 8: try decoder.decodeSingularInt32Field(value: &self.coreLimit)
-      case 9: try decoder.decodeSingularMessageField(value: &self._payloadConfig)
-      case 10: try decoder.decodeRepeatedInt32Field(value: &self.coreList)
-      case 11: try decoder.decodeSingularStringField(value: &self.otherServerApi)
-      case 12: try decoder.decodeSingularInt32Field(value: &self.threadsPerCq)
-      case 21: try decoder.decodeSingularInt32Field(value: &self.serverProcesses)
-      case 1001: try decoder.decodeSingularInt32Field(value: &self.resourceQuotaSize)
-      case 1002: try decoder.decodeRepeatedMessageField(value: &self.channelArgs)
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.serverType) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._securityParams) }()
+      case 4: try { try decoder.decodeSingularInt32Field(value: &self.port) }()
+      case 7: try { try decoder.decodeSingularInt32Field(value: &self.asyncServerThreads) }()
+      case 8: try { try decoder.decodeSingularInt32Field(value: &self.coreLimit) }()
+      case 9: try { try decoder.decodeSingularMessageField(value: &self._payloadConfig) }()
+      case 10: try { try decoder.decodeRepeatedInt32Field(value: &self.coreList) }()
+      case 11: try { try decoder.decodeSingularStringField(value: &self.otherServerApi) }()
+      case 12: try { try decoder.decodeSingularInt32Field(value: &self.threadsPerCq) }()
+      case 21: try { try decoder.decodeSingularInt32Field(value: &self.serverProcesses) }()
+      case 1001: try { try decoder.decodeSingularInt32Field(value: &self.resourceQuotaSize) }()
+      case 1002: try { try decoder.decodeRepeatedMessageField(value: &self.channelArgs) }()
       default: break
       }
     }
@@ -1590,8 +1697,11 @@ extension Grpc_Testing_ServerArgs: SwiftProtobuf.Message, SwiftProtobuf._Message
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1:
+      case 1: try {
         var v: Grpc_Testing_ServerConfig?
         if let current = self.argtype {
           try decoder.handleConflictingOneOf()
@@ -1599,7 +1709,8 @@ extension Grpc_Testing_ServerArgs: SwiftProtobuf.Message, SwiftProtobuf._Message
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.argtype = .setup(v)}
-      case 2:
+      }()
+      case 2: try {
         var v: Grpc_Testing_Mark?
         if let current = self.argtype {
           try decoder.handleConflictingOneOf()
@@ -1607,17 +1718,25 @@ extension Grpc_Testing_ServerArgs: SwiftProtobuf.Message, SwiftProtobuf._Message
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.argtype = .mark(v)}
+      }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every case branch when no optimizations are
+    // enabled. https://github.com/apple/swift-protobuf/issues/1034
     switch self.argtype {
-    case .setup(let v)?:
+    case .setup?: try {
+      guard case .setup(let v)? = self.argtype else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    case .mark(let v)?:
+    }()
+    case .mark?: try {
+      guard case .mark(let v)? = self.argtype else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1640,10 +1759,13 @@ extension Grpc_Testing_ServerStatus: SwiftProtobuf.Message, SwiftProtobuf._Messa
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularMessageField(value: &self._stats)
-      case 2: try decoder.decodeSingularInt32Field(value: &self.port)
-      case 3: try decoder.decodeSingularInt32Field(value: &self.cores)
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._stats) }()
+      case 2: try { try decoder.decodeSingularInt32Field(value: &self.port) }()
+      case 3: try { try decoder.decodeSingularInt32Field(value: &self.cores) }()
       default: break
       }
     }
@@ -1698,8 +1820,11 @@ extension Grpc_Testing_CoreResponse: SwiftProtobuf.Message, SwiftProtobuf._Messa
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularInt32Field(value: &self.cores)
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.cores) }()
       default: break
       }
     }
@@ -1751,59 +1876,108 @@ extension Grpc_Testing_Scenario: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     8: .standard(proto: "spawn_local_worker_count"),
   ]
 
+  fileprivate class _StorageClass {
+    var _name: String = String()
+    var _clientConfig: Grpc_Testing_ClientConfig? = nil
+    var _numClients: Int32 = 0
+    var _serverConfig: Grpc_Testing_ServerConfig? = nil
+    var _numServers: Int32 = 0
+    var _warmupSeconds: Int32 = 0
+    var _benchmarkSeconds: Int32 = 0
+    var _spawnLocalWorkerCount: Int32 = 0
+
+    static let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _name = source._name
+      _clientConfig = source._clientConfig
+      _numClients = source._numClients
+      _serverConfig = source._serverConfig
+      _numServers = source._numServers
+      _warmupSeconds = source._warmupSeconds
+      _benchmarkSeconds = source._benchmarkSeconds
+      _spawnLocalWorkerCount = source._spawnLocalWorkerCount
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      switch fieldNumber {
-      case 1: try decoder.decodeSingularStringField(value: &self.name)
-      case 2: try decoder.decodeSingularMessageField(value: &self._clientConfig)
-      case 3: try decoder.decodeSingularInt32Field(value: &self.numClients)
-      case 4: try decoder.decodeSingularMessageField(value: &self._serverConfig)
-      case 5: try decoder.decodeSingularInt32Field(value: &self.numServers)
-      case 6: try decoder.decodeSingularInt32Field(value: &self.warmupSeconds)
-      case 7: try decoder.decodeSingularInt32Field(value: &self.benchmarkSeconds)
-      case 8: try decoder.decodeSingularInt32Field(value: &self.spawnLocalWorkerCount)
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._name) }()
+        case 2: try { try decoder.decodeSingularMessageField(value: &_storage._clientConfig) }()
+        case 3: try { try decoder.decodeSingularInt32Field(value: &_storage._numClients) }()
+        case 4: try { try decoder.decodeSingularMessageField(value: &_storage._serverConfig) }()
+        case 5: try { try decoder.decodeSingularInt32Field(value: &_storage._numServers) }()
+        case 6: try { try decoder.decodeSingularInt32Field(value: &_storage._warmupSeconds) }()
+        case 7: try { try decoder.decodeSingularInt32Field(value: &_storage._benchmarkSeconds) }()
+        case 8: try { try decoder.decodeSingularInt32Field(value: &_storage._spawnLocalWorkerCount) }()
+        default: break
+        }
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.name.isEmpty {
-      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
-    }
-    if let v = self._clientConfig {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    }
-    if self.numClients != 0 {
-      try visitor.visitSingularInt32Field(value: self.numClients, fieldNumber: 3)
-    }
-    if let v = self._serverConfig {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
-    }
-    if self.numServers != 0 {
-      try visitor.visitSingularInt32Field(value: self.numServers, fieldNumber: 5)
-    }
-    if self.warmupSeconds != 0 {
-      try visitor.visitSingularInt32Field(value: self.warmupSeconds, fieldNumber: 6)
-    }
-    if self.benchmarkSeconds != 0 {
-      try visitor.visitSingularInt32Field(value: self.benchmarkSeconds, fieldNumber: 7)
-    }
-    if self.spawnLocalWorkerCount != 0 {
-      try visitor.visitSingularInt32Field(value: self.spawnLocalWorkerCount, fieldNumber: 8)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      if !_storage._name.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._name, fieldNumber: 1)
+      }
+      if let v = _storage._clientConfig {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+      }
+      if _storage._numClients != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._numClients, fieldNumber: 3)
+      }
+      if let v = _storage._serverConfig {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      }
+      if _storage._numServers != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._numServers, fieldNumber: 5)
+      }
+      if _storage._warmupSeconds != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._warmupSeconds, fieldNumber: 6)
+      }
+      if _storage._benchmarkSeconds != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._benchmarkSeconds, fieldNumber: 7)
+      }
+      if _storage._spawnLocalWorkerCount != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._spawnLocalWorkerCount, fieldNumber: 8)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Grpc_Testing_Scenario, rhs: Grpc_Testing_Scenario) -> Bool {
-    if lhs.name != rhs.name {return false}
-    if lhs._clientConfig != rhs._clientConfig {return false}
-    if lhs.numClients != rhs.numClients {return false}
-    if lhs._serverConfig != rhs._serverConfig {return false}
-    if lhs.numServers != rhs.numServers {return false}
-    if lhs.warmupSeconds != rhs.warmupSeconds {return false}
-    if lhs.benchmarkSeconds != rhs.benchmarkSeconds {return false}
-    if lhs.spawnLocalWorkerCount != rhs.spawnLocalWorkerCount {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._name != rhs_storage._name {return false}
+        if _storage._clientConfig != rhs_storage._clientConfig {return false}
+        if _storage._numClients != rhs_storage._numClients {return false}
+        if _storage._serverConfig != rhs_storage._serverConfig {return false}
+        if _storage._numServers != rhs_storage._numServers {return false}
+        if _storage._warmupSeconds != rhs_storage._warmupSeconds {return false}
+        if _storage._benchmarkSeconds != rhs_storage._benchmarkSeconds {return false}
+        if _storage._spawnLocalWorkerCount != rhs_storage._spawnLocalWorkerCount {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1817,8 +1991,11 @@ extension Grpc_Testing_Scenarios: SwiftProtobuf.Message, SwiftProtobuf._MessageI
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeRepeatedMessageField(value: &self.scenarios)
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.scenarios) }()
       default: break
       }
     }
@@ -1918,25 +2095,28 @@ extension Grpc_Testing_ScenarioResultSummary: SwiftProtobuf.Message, SwiftProtob
     _ = _uniqueStorage()
     try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
       while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
         switch fieldNumber {
-        case 1: try decoder.decodeSingularDoubleField(value: &_storage._qps)
-        case 2: try decoder.decodeSingularDoubleField(value: &_storage._qpsPerServerCore)
-        case 3: try decoder.decodeSingularDoubleField(value: &_storage._serverSystemTime)
-        case 4: try decoder.decodeSingularDoubleField(value: &_storage._serverUserTime)
-        case 5: try decoder.decodeSingularDoubleField(value: &_storage._clientSystemTime)
-        case 6: try decoder.decodeSingularDoubleField(value: &_storage._clientUserTime)
-        case 7: try decoder.decodeSingularDoubleField(value: &_storage._latency50)
-        case 8: try decoder.decodeSingularDoubleField(value: &_storage._latency90)
-        case 9: try decoder.decodeSingularDoubleField(value: &_storage._latency95)
-        case 10: try decoder.decodeSingularDoubleField(value: &_storage._latency99)
-        case 11: try decoder.decodeSingularDoubleField(value: &_storage._latency999)
-        case 12: try decoder.decodeSingularDoubleField(value: &_storage._serverCpuUsage)
-        case 13: try decoder.decodeSingularDoubleField(value: &_storage._successfulRequestsPerSecond)
-        case 14: try decoder.decodeSingularDoubleField(value: &_storage._failedRequestsPerSecond)
-        case 15: try decoder.decodeSingularDoubleField(value: &_storage._clientPollsPerRequest)
-        case 16: try decoder.decodeSingularDoubleField(value: &_storage._serverPollsPerRequest)
-        case 17: try decoder.decodeSingularDoubleField(value: &_storage._serverQueriesPerCpuSec)
-        case 18: try decoder.decodeSingularDoubleField(value: &_storage._clientQueriesPerCpuSec)
+        case 1: try { try decoder.decodeSingularDoubleField(value: &_storage._qps) }()
+        case 2: try { try decoder.decodeSingularDoubleField(value: &_storage._qpsPerServerCore) }()
+        case 3: try { try decoder.decodeSingularDoubleField(value: &_storage._serverSystemTime) }()
+        case 4: try { try decoder.decodeSingularDoubleField(value: &_storage._serverUserTime) }()
+        case 5: try { try decoder.decodeSingularDoubleField(value: &_storage._clientSystemTime) }()
+        case 6: try { try decoder.decodeSingularDoubleField(value: &_storage._clientUserTime) }()
+        case 7: try { try decoder.decodeSingularDoubleField(value: &_storage._latency50) }()
+        case 8: try { try decoder.decodeSingularDoubleField(value: &_storage._latency90) }()
+        case 9: try { try decoder.decodeSingularDoubleField(value: &_storage._latency95) }()
+        case 10: try { try decoder.decodeSingularDoubleField(value: &_storage._latency99) }()
+        case 11: try { try decoder.decodeSingularDoubleField(value: &_storage._latency999) }()
+        case 12: try { try decoder.decodeSingularDoubleField(value: &_storage._serverCpuUsage) }()
+        case 13: try { try decoder.decodeSingularDoubleField(value: &_storage._successfulRequestsPerSecond) }()
+        case 14: try { try decoder.decodeSingularDoubleField(value: &_storage._failedRequestsPerSecond) }()
+        case 15: try { try decoder.decodeSingularDoubleField(value: &_storage._clientPollsPerRequest) }()
+        case 16: try { try decoder.decodeSingularDoubleField(value: &_storage._serverPollsPerRequest) }()
+        case 17: try { try decoder.decodeSingularDoubleField(value: &_storage._serverQueriesPerCpuSec) }()
+        case 18: try { try decoder.decodeSingularDoubleField(value: &_storage._clientQueriesPerCpuSec) }()
         default: break
         }
       }
@@ -2051,16 +2231,19 @@ extension Grpc_Testing_ScenarioResult: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularMessageField(value: &self._scenario)
-      case 2: try decoder.decodeSingularMessageField(value: &self._latencies)
-      case 3: try decoder.decodeRepeatedMessageField(value: &self.clientStats)
-      case 4: try decoder.decodeRepeatedMessageField(value: &self.serverStats)
-      case 5: try decoder.decodeRepeatedInt32Field(value: &self.serverCores)
-      case 6: try decoder.decodeSingularMessageField(value: &self._summary)
-      case 7: try decoder.decodeRepeatedBoolField(value: &self.clientSuccess)
-      case 8: try decoder.decodeRepeatedBoolField(value: &self.serverSuccess)
-      case 9: try decoder.decodeRepeatedMessageField(value: &self.requestResults)
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._scenario) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._latencies) }()
+      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.clientStats) }()
+      case 4: try { try decoder.decodeRepeatedMessageField(value: &self.serverStats) }()
+      case 5: try { try decoder.decodeRepeatedInt32Field(value: &self.serverCores) }()
+      case 6: try { try decoder.decodeSingularMessageField(value: &self._summary) }()
+      case 7: try { try decoder.decodeRepeatedBoolField(value: &self.clientSuccess) }()
+      case 8: try { try decoder.decodeRepeatedBoolField(value: &self.serverSuccess) }()
+      case 9: try { try decoder.decodeRepeatedMessageField(value: &self.requestResults) }()
       default: break
       }
     }

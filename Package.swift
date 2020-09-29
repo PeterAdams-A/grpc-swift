@@ -39,12 +39,6 @@ let package = Package(
 
     // Logging API.
     .package(url: "https://github.com/apple/swift-log.git", from: "1.4.0"),
-
-    // Argument parsing
-    .package(url: "https://github.com/apple/swift-argument-parser.git", from: "0.3.0"),
-
-    // Service Lifecycle.
-    .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", .branch("main")),
   ],
   targets: [
     // The main GRPC module.
@@ -247,19 +241,6 @@ let package = Package(
         "RouteGuideModel",
       ],
       path: "Sources/Examples/RouteGuide/Server"
-    ),
-
-    // QPS benchmark worker.
-    .target(
-        name: "QPSBenchmark",
-        dependencies: [
-          "GRPC",
-          "NIO",
-          .product(name: "ArgumentParser", package: "swift-argument-parser"),
-          "Logging",
-          "Lifecycle",
-        ],
-        path: "Sources/QPSBenchmark"
     ),
   ]
 )

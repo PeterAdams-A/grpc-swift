@@ -93,9 +93,18 @@ public struct Grpc_Core_Metric {
 
   #if !swift(>=4.1)
     public static func ==(lhs: Grpc_Core_Metric.OneOf_Value, rhs: Grpc_Core_Metric.OneOf_Value) -> Bool {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch (lhs, rhs) {
-      case (.count(let l), .count(let r)): return l == r
-      case (.histogram(let l), .histogram(let r)): return l == r
+      case (.count, .count): return {
+        guard case .count(let l) = lhs, case .count(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
+      case (.histogram, .histogram): return {
+        guard case .histogram(let l) = lhs, case .histogram(let r) = rhs else { preconditionFailure() }
+        return l == r
+      }()
       default: return false
       }
     }
@@ -130,9 +139,12 @@ extension Grpc_Core_Bucket: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularDoubleField(value: &self.start)
-      case 2: try decoder.decodeSingularUInt64Field(value: &self.count)
+      case 1: try { try decoder.decodeSingularDoubleField(value: &self.start) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.count) }()
       default: break
       }
     }
@@ -164,8 +176,11 @@ extension Grpc_Core_Histogram: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeRepeatedMessageField(value: &self.buckets)
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.buckets) }()
       default: break
       }
     }
@@ -195,14 +210,18 @@ extension Grpc_Core_Metric: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeSingularStringField(value: &self.name)
-      case 10:
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 10: try {
         if self.value != nil {try decoder.handleConflictingOneOf()}
         var v: UInt64?
         try decoder.decodeSingularUInt64Field(value: &v)
         if let v = v {self.value = .count(v)}
-      case 11:
+      }()
+      case 11: try {
         var v: Grpc_Core_Histogram?
         if let current = self.value {
           try decoder.handleConflictingOneOf()
@@ -210,6 +229,7 @@ extension Grpc_Core_Metric: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.value = .histogram(v)}
+      }()
       default: break
       }
     }
@@ -219,11 +239,18 @@ extension Grpc_Core_Metric: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
     }
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every case branch when no optimizations are
+    // enabled. https://github.com/apple/swift-protobuf/issues/1034
     switch self.value {
-    case .count(let v)?:
+    case .count?: try {
+      guard case .count(let v)? = self.value else { preconditionFailure() }
       try visitor.visitSingularUInt64Field(value: v, fieldNumber: 10)
-    case .histogram(let v)?:
+    }()
+    case .histogram?: try {
+      guard case .histogram(let v)? = self.value else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -245,8 +272,11 @@ extension Grpc_Core_Stats: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try decoder.decodeRepeatedMessageField(value: &self.metrics)
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.metrics) }()
       default: break
       }
     }
