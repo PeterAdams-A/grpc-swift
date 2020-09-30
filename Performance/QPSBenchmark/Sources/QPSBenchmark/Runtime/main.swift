@@ -26,13 +26,13 @@ final class QPSWorkerApp: ParsableCommand {
                    "Credential type for communication with driver");
      */
 
-    @Option(name: .shortAndLong, help: "Port for communication with driver.")
+    @Option(name: .customLong("driver_port"), help: "Port for communication with driver.")
     var driverPort: Int
 
-    @Option(name: .shortAndLong, help: "Port for operation as a server.")
+    @Option(name: .customLong("server_port"), help: "Port for operation as a server.")
     var serverPort: Int?
 
-    @Option(name: .shortAndLong, help: "Credential type for communication with driver.")
+    @Option(name: .customLong("credential_type"), help: "Credential type for communication with driver.")
     var credentialType: String = "boo"  // TODO:  Default to kInsecureCredentialsType
 
     func run() throws {
