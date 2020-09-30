@@ -81,12 +81,16 @@ final class QPSWorkerApp: ParsableCommand {
             }
         }
 
-        // TODO:  Termination from internally.
+        // Termination from internally.
+        try qpsWorker.wait()
+
+        logger.info("Worker has finished.")
+
         // lifecycle.wait()
         // Wait on the server's `onClose` future to stop the program from exiting.
-        _ = try qpsWorker.server?.flatMap {
-            $0.onClose
-        }.wait()
+        // _ = try qpsWorker.server?.flatMap {
+           //  $0.onClose
+        // }.wait()
     }
 }
 

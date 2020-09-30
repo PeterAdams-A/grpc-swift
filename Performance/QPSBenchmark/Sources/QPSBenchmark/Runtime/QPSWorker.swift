@@ -33,6 +33,7 @@ class QPSWorker {
 
     var eventLoopGroup: MultiThreadedEventLoopGroup?
     var server: EventLoopFuture<Server>?
+    var workEndFuture: EventLoopFuture<Void>? = nil
 
     func start() {
         precondition(self.eventLoopGroup == nil)
@@ -40,7 +41,9 @@ class QPSWorker {
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         self.eventLoopGroup = eventLoopGroup
 
-        let workerService = WorkerServiceImpl()
+        let workEndPromise: EventLoopPromise<Void> = eventLoopGroup.next().makePromise()
+        self.workEndFuture = workEndPromise.futureResult
+        let workerService = WorkerServiceImpl(finishedPromise: workEndPromise)
 
         // Start the server.
         self.server = Server.insecure(group: eventLoopGroup)
@@ -52,6 +55,11 @@ class QPSWorker {
         precondition(self.eventLoopGroup != nil)
         self.logger.info("Stopping")
         try self.eventLoopGroup?.syncShutdownGracefully()
+    }
+
+    func wait() throws {
+        precondition(self.workEndFuture != nil)
+        try self.workEndFuture?.wait()
     }
 
     func Done() {
