@@ -23,6 +23,7 @@ import Logging
 final class AsyncQpsServer {
     let eventLoopGroup: MultiThreadedEventLoopGroup
     let server: EventLoopFuture<Server>
+    let threads: Int
 
     let logger = Logger(label: "AsyncQpsServer")
 
@@ -30,6 +31,7 @@ final class AsyncQpsServer {
         let threads = config.asyncServerThreads > 0 ? Int(config.asyncServerThreads) : System.coreCount
         self.logger.info("Sizing AsyncQpsServer", metadata: ["threads": "\(threads)"])
         self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threads)
+        self.threads = threads
 
         let workerService = AsyncQpsServerImpl()
 

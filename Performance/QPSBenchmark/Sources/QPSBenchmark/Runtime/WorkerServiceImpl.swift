@@ -17,6 +17,11 @@
 import NIO
 import GRPC
 
+struct ServerInfo {
+    var cores: Int
+    var port: Int
+}
+
 class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
     let finishedPromise: EventLoopPromise<Void>
     let serverPortOverride: Int?
@@ -51,6 +56,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                      return ret;
                      */
                         self.runServerBody(context: context, serverConfig: serverConfig)
+
 
                     case .mark(let mark):
                         // TODO:  Capture stats
@@ -114,7 +120,17 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
         case .syncServer:
             throw GRPCStatus(code: .unimplemented, message: "Server Type not implemented")
         case .asyncServer:
-            createAsyncServer(config: config)
+            let asyncServer = createAsyncServer(config: config)
+            asyncServer.server.whenSuccess { server in
+                let port = server.channel.localAddress?.port ?? 0
+                let threads = asyncServer.threads
+
+                var response = Grpc_Testing_ServerStatus()
+                response.cores = Int32(threads)
+                response.port = Int32(port)
+
+                context.sendResponse(response)
+            }
         case .asyncGenericServer:
             throw GRPCStatus(code: .unimplemented, message: "Server Type not implemented")
         case .otherServer:
@@ -150,11 +166,16 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
 
         do {
             try WorkerServiceImpl.createServer(context: context, config: serverConfig)
+
+            var status = Grpc_Testing_ServerStatus()
+            // status.cores =
+          //  status.hasStats = false
+            //status.port =
+            // status.stats
         }
         catch {
             context.statusPromise.fail(error)
         }
-
     }
 
 
