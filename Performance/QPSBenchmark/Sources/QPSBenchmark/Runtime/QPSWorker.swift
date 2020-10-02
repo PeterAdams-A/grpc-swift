@@ -20,12 +20,12 @@ import Logging
 
 class QPSWorker {
     var driverPort: Int
-    //var serverPort: Int
+    var serverPort: Int?
     //var credentialType: String
 
-    init(driverPort: Int) { // , serverPort: Int, credentialType: String) {
+    init(driverPort: Int, serverPort: Int?) { // credentialType: String) {
         self.driverPort = driverPort
-        //self.serverPort = serverPort
+        self.serverPort = serverPort
         //self.credentialType = credentialType
     }
 
@@ -43,11 +43,13 @@ class QPSWorker {
 
         let workEndPromise: EventLoopPromise<Void> = eventLoopGroup.next().makePromise()
         self.workEndFuture = workEndPromise.futureResult
-        let workerService = WorkerServiceImpl(finishedPromise: workEndPromise)
+        let workerService = WorkerServiceImpl(finishedPromise: workEndPromise, serverPortOverride: self.serverPort)
 
         // Start the server.
+        self.logger.info("Binding to localhost:\(self.driverPort)")
         self.server = Server.insecure(group: eventLoopGroup)
           .withServiceProviders([workerService])
+            .withLogger(Logger(label: "GRPC"))
             .bind(host: "localhost", port: self.driverPort)
     }
 
@@ -55,10 +57,21 @@ class QPSWorker {
         precondition(self.eventLoopGroup != nil)
         self.logger.info("Stopping")
         try self.eventLoopGroup?.syncShutdownGracefully()
+        self.logger.info("Stopped")
     }
 
     func wait() throws {
+        precondition(self.server != nil)
         precondition(self.workEndFuture != nil)
+        self.server?.whenComplete { result in
+            switch result {
+            case .failure(let error):
+                self.logger.error("Server Failed \(error)")
+                return
+            case .success(_):
+                self.logger.info("Server running")
+            }
+        }
         try self.workEndFuture?.wait()
     }
 

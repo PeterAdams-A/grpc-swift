@@ -62,8 +62,8 @@ final class QPSWorkerApp: ParsableCommand {
          srand(seed());
          */
 
-        let qpsWorker = QPSWorker(driverPort: self.driverPort)
-                                 // serverPort: self.serverPort,
+        let qpsWorker = QPSWorker(driverPort: self.driverPort,
+                                  serverPort: self.serverPort)
                                  // credentialType: self.credentialType)
         qpsWorker.start()
         // TODO:  Investigate eventloop future compatibility mode.
