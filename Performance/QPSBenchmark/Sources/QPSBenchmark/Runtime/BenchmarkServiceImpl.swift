@@ -16,19 +16,21 @@
 
 import NIO
 import GRPC
+import Foundation
 
 final class AsyncQpsServerImpl: Grpc_Testing_BenchmarkServiceProvider {
     // TODO:  In C++ a singleton response is allocated and reused.
     // Check if that makes sense in swift.
     // Might make sense to recycle payload.
 
-    // TODO:  Clear payload on request to save memory.
-
     func unaryCall(request: Grpc_Testing_SimpleRequest,
                    context: StatusOnlyCallContext) -> EventLoopFuture<Grpc_Testing_SimpleResponse> {
-        context.logger.warning("unaryCall not implemented yet")
-        return context.eventLoop.makeFailedFuture(GRPCStatus(code: GRPCStatus.Code.unimplemented,
-                                                             message: "Not implemented"))
+        do {
+            return context.eventLoop.makeSucceededFuture(try AsyncQpsServerImpl.processSimpleRPC(request: request))
+       }
+        catch {
+            return context.eventLoop.makeFailedFuture(error)
+        }
     }
 
     func streamingCall(context: StreamingResponseCallContext<Grpc_Testing_SimpleResponse>) -> EventLoopFuture<(StreamEvent<Grpc_Testing_SimpleRequest>) -> Void> {
@@ -69,23 +71,27 @@ final class AsyncQpsServerImpl: Grpc_Testing_BenchmarkServiceProvider {
       }
     } */
 
+    static func makePayload(type: Grpc_Testing_PayloadType, size: Int) throws -> Grpc_Testing_Payload {
+        if type != .compressable {
+            throw GRPCStatus(code: .internalError, message: "Failed to make payload")
+        }
+        var payload = Grpc_Testing_Payload()
+        payload.body = Data(count: size)
+        payload.type = type
+        return payload
+    }
+
+    static func processSimpleRPC(request: Grpc_Testing_SimpleRequest) throws -> Grpc_Testing_SimpleResponse {
+        var response = Grpc_Testing_SimpleResponse()
+        // TODO: Double check nothing else needs filing out.
+        if request.responseSize > 0 {
+            response.payload = try makePayload(type: request.responseType, size: Int(request.responseSize))
+        }
+        return response
+    }
+
 }
 
-/*
- static bool SetPayload(PayloadType type, int size, Payload* payload) {
-     // TODO(yangg): Support UNCOMPRESSABLE payload.
-     if (type != PayloadType::COMPRESSABLE) {
-       return false;
-     }
-     payload->set_type(type);
-     // Don't waste time creating a new payload of identical size.
-     if (payload->body().length() != static_cast<size_t>(size)) {
-       std::unique_ptr<char[]> body(new char[size]());
-       payload->set_body(body.get(), size);
-     }
-     return true;
-   }
- */
 
 /* class ServerRpcContextUnaryImpl final : public ServerRpcContext {
  public:

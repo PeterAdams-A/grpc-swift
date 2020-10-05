@@ -26,7 +26,9 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
     let finishedPromise: EventLoopPromise<Void>
     let serverPortOverride: Int?
 
+    // TODO: Sort out types and record.
     var runningServer: Int? = nil
+    var runningClient: Int? = nil
 
     init(finishedPromise: EventLoopPromise<Void>, serverPortOverride: Int?) {
         self.finishedPromise = finishedPromise
@@ -77,8 +79,37 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
 
     func runClient(context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>) -> EventLoopFuture<(StreamEvent<Grpc_Testing_ClientArgs>) -> Void> {
         context.logger.info("runClient stream started")
-
-
+        return context.eventLoop.makeSucceededFuture( { event in
+            switch event {
+            case .message(let clientArgs):
+                if let argType = clientArgs.argtype {
+                    switch argType {
+                    case .setup(let clientConfig):
+                        context.logger.info("client setup requested")
+                        guard self.runningClient == nil else {
+                            context.logger.error("client already running")
+                            context.statusPromise.fail(GRPCStatus(code: GRPCStatus.Code.resourceExhausted,
+                                                                  message: "Client worker busy"))
+                            return
+                        }
+                        // TODO:  Scoped the next within profile.
+                        self.runClientBody(context: context, clientConfig: clientConfig)
+                        // Initial status is the default (in C++)
+                        context.sendResponse(Grpc_Testing_ClientStatus())
+                    case .mark(let mark):
+                        // TODO:  Capture stats
+                        context.logger.info("client mark requested")
+                        if mark.reset {
+                            // TODO:  reset stats.
+                        }
+                    }
+                }
+            case .end:
+                context.logger.info("runClient ended")
+                // TODO:  Shutdown
+                context.statusPromise.succeed(.ok)
+            }
+        })
         context.logger.warning("runClient not implemented yet")
         return context.eventLoop.makeFailedFuture(GRPCStatus(code: GRPCStatus.Code.unimplemented,
                                                              message: "Not implemented"))
@@ -178,6 +209,64 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
         }
     }
 
+    // MARK: Create Client
+    private func runClientBody(context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>,
+                               clientConfig: Grpc_Testing_ClientConfig) {
+        do {
+            try WorkerServiceImpl.createClient(context: context, clientConfig: clientConfig)
+        }
+        catch {
+            context.statusPromise.fail(error)
+        }
+    }
+
+    private static func createClient(context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>,
+                                     clientConfig: Grpc_Testing_ClientConfig) throws {
+        switch clientConfig.clientType {
+        case .syncClient:
+            throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
+        case .asyncClient:
+            if let payloadConfig = clientConfig.payloadConfig.payload {
+                switch payloadConfig {
+                case .bytebufParams(_):
+                    throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
+                case .simpleParams(_):
+                    try createAsyncClient(config: clientConfig)
+                case .complexParams(_):
+                    try createAsyncClient(config: clientConfig)
+                }
+            }
+            // TODO:  else what?
+        case .otherClient:
+            throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
+        case .callbackClient:
+            throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
+        case .UNRECOGNIZED(_):
+            throw GRPCStatus(code: .invalidArgument, message: "Unrecognised client type")
+        }
+    /*
+     tatic std::unique_ptr<Client> CreateClient(const ClientConfig& config) {
+       gpr_log(GPR_INFO, "Starting client of type %s %s %d",
+               ClientType_Name(config.client_type()).c_str(),
+               RpcType_Name(config.rpc_type()).c_str(),
+               config.payload_config().has_bytebuf_params());
+
+       switch (config.client_type()) {
+         case ClientType::SYNC_CLIENT:
+           return CreateSynchronousClient(config);
+         case ClientType::ASYNC_CLIENT:
+           return config.payload_config().has_bytebuf_params()
+                      ? CreateGenericAsyncStreamingClient(config)
+                      : CreateAsyncClient(config);
+         case ClientType::CALLBACK_CLIENT:
+           return CreateCallbackClient(config);
+         default:
+           abort();
+       }
+       abort();
+     }
+     */
+    }
 
 /*
 gpr_log(GPR_INFO, "RunServerBody: about to create server");

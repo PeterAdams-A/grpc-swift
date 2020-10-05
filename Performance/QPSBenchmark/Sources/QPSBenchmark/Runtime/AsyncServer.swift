@@ -18,8 +18,6 @@ import NIO
 import GRPC
 import Logging
 
-
-
 final class AsyncQpsServer {
     let eventLoopGroup: MultiThreadedEventLoopGroup
     let server: EventLoopFuture<Server>
