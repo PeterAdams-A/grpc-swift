@@ -65,7 +65,7 @@ final class QPSWorkerApp: ParsableCommand {
         let qpsWorker = QPSWorker(driverPort: self.driverPort,
                                   serverPort: self.serverPort)
                                  // credentialType: self.credentialType)
-        qpsWorker.start()
+        qpsWorker.start(onQuit: { () in lifecycle.shutdown() })
         // TODO:  Investigate eventloop future compatibility mode.
         lifecycle.registerShutdown(label: "QPSWorker", .sync {
             () in try qpsWorker.syncShutdown()
@@ -81,16 +81,16 @@ final class QPSWorkerApp: ParsableCommand {
             }
         }
 
-        // Termination from internally.
-        try qpsWorker.wait()
-
-        logger.info("Worker has finished.")
-
-        // lifecycle.wait()
+        lifecycle.wait()
         // Wait on the server's `onClose` future to stop the program from exiting.
         // _ = try qpsWorker.server?.flatMap {
            //  $0.onClose
         // }.wait()
+
+        // Termination from internally.
+        // try qpsWorker.wait()
+
+        logger.info("Worker has finished.")
     }
 }
 

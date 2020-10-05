@@ -35,14 +35,14 @@ class QPSWorker {
     var server: EventLoopFuture<Server>?
     var workEndFuture: EventLoopFuture<Void>? = nil
 
-    func start() {
+    func start(onQuit: @escaping () -> ()) {
         precondition(self.eventLoopGroup == nil)
         self.logger.info("Starting")
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         self.eventLoopGroup = eventLoopGroup
 
         let workEndPromise: EventLoopPromise<Void> = eventLoopGroup.next().makePromise()
-        self.workEndFuture = workEndPromise.futureResult
+        workEndPromise.futureResult.whenSuccess(onQuit)
         let workerService = WorkerServiceImpl(finishedPromise: workEndPromise, serverPortOverride: self.serverPort)
 
         // Start the server.
@@ -60,7 +60,7 @@ class QPSWorker {
         self.logger.info("Stopped")
     }
 
-    func wait() throws {
+   /* func wait() throws {
         precondition(self.server != nil)
         precondition(self.workEndFuture != nil)
         self.server?.whenComplete { result in
@@ -77,5 +77,5 @@ class QPSWorker {
 
     func Done() {
         
-    }
+    }*/
 }

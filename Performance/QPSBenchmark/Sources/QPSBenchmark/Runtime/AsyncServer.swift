@@ -23,9 +23,10 @@ final class AsyncQpsServer {
     let server: EventLoopFuture<Server>
     let threads: Int
 
-    let logger = Logger(label: "AsyncQpsServer")
+    var logger = Logger(label: "AsyncQpsServer")
 
     init(config: Grpc_Testing_ServerConfig) {
+        // logger.logLevel = .debug
         let threads = config.asyncServerThreads > 0 ? Int(config.asyncServerThreads) : System.coreCount
         self.logger.info("Sizing AsyncQpsServer", metadata: ["threads": "\(threads)"])
         self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threads)
