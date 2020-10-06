@@ -182,11 +182,10 @@ class AsyncQpsClient {
 
     let logger = Logger(label: "AsyncQpsClient")
 
-    init(config: Grpc_Testing_ClientConfig) {
-        let threads = config.asyncClientThreads > 0 ? Int(config.asyncClientThreads) : System.coreCount
-        self.logger.info("Sizing AsyncQpsClient", metadata: ["threads": "\(threads)"])
-        self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threads)
+    init(threads: Int, eventLoopGroup: MultiThreadedEventLoopGroup) {
         self.threads = threads
+        self.logger.info("Sizing AsyncQpsClient", metadata: ["threads": "\(threads)"])
+        self.eventLoopGroup = eventLoopGroup
 
         // TODO:  Setup workers based on
         // config.clientChannels - number of workers.
@@ -201,53 +200,10 @@ class AsyncQpsClient {
             .bind(host: "localhost", port: Int(config.port))*/
     }
 
-    func createClientRequest(payloadConfig: Grpc_Testing_PayloadConfig) throws -> Grpc_Testing_SimpleRequest {
-        if let payload = payloadConfig.payload {
-            switch payload {
-            case .bytebufParams(_):
-                throw GRPCStatus(code: .invalidArgument, message: "Byte buffer not supported.")
-            case .simpleParams(let simpleParams):
-                var result = Grpc_Testing_SimpleRequest()
-                result.responseType = .compressable
-                result.responseSize = simpleParams.respSize
-                result.payload.type = .compressable
-                let size = Int(simpleParams.reqSize)
-                let body = Data(count: size)
-                result.payload.body = body
-                return result
-            case .complexParams(_):
-                throw GRPCStatus(code: .invalidArgument, message: "Complex params not supported.")
-            }
-        } else {
-            // Default - simple proto without payloads.
-            var result = Grpc_Testing_SimpleRequest()
-            result.responseType = .compressable
-            result.responseSize = 0
-            result.payload.type = .compressable
-            return result
-        }
-        /*
-         if (payload_config.has_bytebuf_params()) {
-               GPR_ASSERT(false);  // not appropriate for this specialization
-             } else if (payload_config.has_simple_params()) {
-               req->set_response_type(grpc::testing::PayloadType::COMPRESSABLE);
-               req->set_response_size(payload_config.simple_params().resp_size());
-               req->mutable_payload()->set_type(
-                   grpc::testing::PayloadType::COMPRESSABLE);
-               int size = payload_config.simple_params().req_size();
-               std::unique_ptr<char[]> body(new char[size]);
-               req->mutable_payload()->set_body(body.get(), size);
-             } else if (payload_config.has_complex_params()) {
-               GPR_ASSERT(false);  // not appropriate for this specialization
-             } else {
-               // default should be simple proto without payloads
-               req->set_response_type(grpc::testing::PayloadType::COMPRESSABLE);
-               req->set_response_size(0);
-               req->mutable_payload()->set_type(
-                   grpc::testing::PayloadType::COMPRESSABLE);
-             }
-         */
+    static func threadsToUse(config: Grpc_Testing_ClientConfig) -> Int {
+        return config.asyncClientThreads > 0 ? Int(config.asyncClientThreads) : System.coreCount
     }
+
 }
 
 // Setup threads.
@@ -258,38 +214,111 @@ class AsyncQpsClient {
 // need to look at the histogram stuff.
 
 
-final class AsyncUnaryQpsClient: AsyncQpsClient {
+final class AsyncUnaryQpsClient: AsyncQpsClient{
+    let requestRepeater: RequestRepeater
 
-    override init(config: Grpc_Testing_ClientConfig) {
-        super.init(config: config)
+    init(config: Grpc_Testing_ClientConfig) {
+        let threads = AsyncQpsClient.threadsToUse(config: config)
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threads)
+        self.requestRepeater = AsyncUnaryQpsClient.makeRequestRepeater(config: config, elg: eventLoopGroup)
+        super.init(threads: threads, eventLoopGroup: eventLoopGroup)
+
         // Start the train.
-        try! makeRequest(config: config)
+        self.requestRepeater.start()
     }
 
-    func makeRequest(config : Grpc_Testing_ClientConfig) throws {
-        // let port = 0 // TODO
+    private static func makeRequestRepeater(config : Grpc_Testing_ClientConfig,
+                                            elg: EventLoopGroup) -> RequestRepeater {
         let firstTarget = config.serverTargets.first!
         let splitIndex = firstTarget.lastIndex(of: ":")!
         let host = firstTarget[..<splitIndex]
         let portString = firstTarget[(firstTarget.index(after: splitIndex))...]
         let port = Int(portString)!
 
-        let channel = ClientConnection.insecure(group: self.eventLoopGroup)
+        let channel = ClientConnection.insecure(group: elg)
             .connect(host: String(host), port: port)
 
         let client = Grpc_Testing_BenchmarkServiceClient(channel: channel)
-        let request = try createClientRequest(payloadConfig: config.payloadConfig)
-        let result = client.unaryCall(request)
-        // TODO:  I think C++ goes as fast as it can here - not waiting for completion (but listening to see how busy channel is)
-        // TODO:  Set function to run on finished.
-        // For now just keep going forever.
-        result.status.map { status in
-            if status.isOk {
-                try! self.makeRequest(config: config)
-            } else {
-                self.logger.error("Bad status from unary request", metadata: ["status": "\(status)"])
+        return RequestRepeater(client: client, payloadConfig: config.payloadConfig)
+    }
+
+    class RequestRepeater {
+        let client: Grpc_Testing_BenchmarkServiceClient
+        let payloadConfig: Grpc_Testing_PayloadConfig
+        let logger = Logger(label: "RequestRepeater")
+
+        init(client: Grpc_Testing_BenchmarkServiceClient, payloadConfig: Grpc_Testing_PayloadConfig) {
+            self.client = client
+            self.payloadConfig = payloadConfig
+        }
+
+        private func makeRequestAndRepeat() throws {
+            let request = try RequestRepeater.createClientRequest(payloadConfig: self.payloadConfig)
+            let result = client.unaryCall(request)
+            // TODO:  I think C++ allows a pool of outstanding requests here.
+            // TODO:  Set function to run on finished.
+            // For now just keep going forever.
+            result.status.map { status in
+                if status.isOk {
+                    try! self.makeRequestAndRepeat()
+                } else {
+                    self.logger.error("Bad status from unary request", metadata: ["status": "\(status)"])
+                }
             }
         }
+
+        static func createClientRequest(payloadConfig: Grpc_Testing_PayloadConfig) throws -> Grpc_Testing_SimpleRequest {
+            if let payload = payloadConfig.payload {
+                switch payload {
+                case .bytebufParams(_):
+                    throw GRPCStatus(code: .invalidArgument, message: "Byte buffer not supported.")
+                case .simpleParams(let simpleParams):
+                    var result = Grpc_Testing_SimpleRequest()
+                    result.responseType = .compressable
+                    result.responseSize = simpleParams.respSize
+                    result.payload.type = .compressable
+                    let size = Int(simpleParams.reqSize)
+                    let body = Data(count: size)
+                    result.payload.body = body
+                    return result
+                case .complexParams(_):
+                    throw GRPCStatus(code: .invalidArgument, message: "Complex params not supported.")
+                }
+            } else {
+                // Default - simple proto without payloads.
+                var result = Grpc_Testing_SimpleRequest()
+                result.responseType = .compressable
+                result.responseSize = 0
+                result.payload.type = .compressable
+                return result
+            }
+            /*
+             if (payload_config.has_bytebuf_params()) {
+                   GPR_ASSERT(false);  // not appropriate for this specialization
+                 } else if (payload_config.has_simple_params()) {
+                   req->set_response_type(grpc::testing::PayloadType::COMPRESSABLE);
+                   req->set_response_size(payload_config.simple_params().resp_size());
+                   req->mutable_payload()->set_type(
+                       grpc::testing::PayloadType::COMPRESSABLE);
+                   int size = payload_config.simple_params().req_size();
+                   std::unique_ptr<char[]> body(new char[size]);
+                   req->mutable_payload()->set_body(body.get(), size);
+                 } else if (payload_config.has_complex_params()) {
+                   GPR_ASSERT(false);  // not appropriate for this specialization
+                 } else {
+                   // default should be simple proto without payloads
+                   req->set_response_type(grpc::testing::PayloadType::COMPRESSABLE);
+                   req->set_response_size(0);
+                   req->mutable_payload()->set_type(
+                       grpc::testing::PayloadType::COMPRESSABLE);
+                 }
+             */
+        }
+
+        func start() {
+            try! makeRequestAndRepeat()
+        }
+
     }
 /*
      explicit AsyncUnaryClient(const ClientConfig& config)
