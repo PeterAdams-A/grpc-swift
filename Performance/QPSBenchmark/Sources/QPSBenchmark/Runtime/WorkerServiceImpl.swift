@@ -77,6 +77,22 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
         })
     }
 
+    // TODO:  See Client::Mark
+    static func dummyClientStatus(reset: Bool) -> Grpc_Testing_ClientStatus {
+        var result = Grpc_Testing_ClientStatus()
+        result.stats.timeElapsed = 0
+        result.stats.timeSystem = 0
+        result.stats.timeUser = 0
+        result.stats.cqPollCount = 0
+        // TODO:  Histograms and metrics into result.stats.coreStats.
+        // TODO:  Fill in latencies.
+        // TODO:  Request results
+        if reset {
+            // TODO:  reset stats.
+        }
+        return result
+    }
+
     func runClient(context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>) -> EventLoopFuture<(StreamEvent<Grpc_Testing_ClientArgs>) -> Void> {
         context.logger.info("runClient stream started")
         return context.eventLoop.makeSucceededFuture( { event in
@@ -99,9 +115,8 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                     case .mark(let mark):
                         // TODO:  Capture stats
                         context.logger.info("client mark requested")
-                        if mark.reset {
-                            // TODO:  reset stats.
-                        }
+                        let clientStatus = WorkerServiceImpl.dummyClientStatus(reset: mark.reset)
+                        context.sendResponse(clientStatus)
                     }
                 }
             case .end:
