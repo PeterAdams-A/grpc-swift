@@ -63,9 +63,8 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                     case .mark(let mark):
                         // TODO:  Capture stats
                         context.logger.info("server mark requested")
-                        if mark.reset {
-                            // TODO: reset stats.
-                        }
+                        let serverStatus = WorkerServiceImpl.dummyServerStatus(reset: mark.reset)
+                        context.sendResponse(serverStatus)
                     }
                 }
 
@@ -75,6 +74,23 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                 context.statusPromise.succeed(.ok)
             }
         })
+    }
+
+    // TODO:  Find out where the basics are set.
+    static func dummyServerStatus(reset: Bool) -> Grpc_Testing_ServerStatus {
+        var result = Grpc_Testing_ServerStatus()
+        // TODO:  Core stats
+        result.stats.timeElapsed = 0
+        result.stats.timeSystem = 0
+        result.stats.timeUser = 0
+        result.stats.totalCpuTime = 0
+        result.stats.idleCpuTime = 0
+        result.stats.cqPollCount = 0
+        // TODO:  Core stats
+        if reset {
+            // TODO:
+        }
+        return result
     }
 
     // TODO:  See Client::Mark
@@ -125,9 +141,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                 context.statusPromise.succeed(.ok)
             }
         })
-        context.logger.warning("runClient not implemented yet")
-        return context.eventLoop.makeFailedFuture(GRPCStatus(code: GRPCStatus.Code.unimplemented,
-                                                             message: "Not implemented"))
+        
      /*   Status RunClient(
               ServerContext* ctx,
               ServerReaderWriter<ClientStatus, ClientArgs>* stream) override {
