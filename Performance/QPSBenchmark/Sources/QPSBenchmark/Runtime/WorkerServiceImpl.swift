@@ -28,7 +28,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
 
     // TODO: Sort out types and record.
     var runningServer: Int? = nil
-    var runningClient: Int? = nil
+    var runningClient: QpsClient? = nil
 
     init(finishedPromise: EventLoopPromise<Void>, serverPortOverride: Int?) {
         self.finishedPromise = finishedPromise
@@ -93,21 +93,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
         return result
     }
 
-    // TODO:  See Client::Mark
-    static func dummyClientStatus(reset: Bool) -> Grpc_Testing_ClientStatus {
-        var result = Grpc_Testing_ClientStatus()
-        result.stats.timeElapsed = 0
-        result.stats.timeSystem = 0
-        result.stats.timeUser = 0
-        result.stats.cqPollCount = 0
-        // TODO:  Histograms and metrics into result.stats.coreStats.
-        // TODO:  Fill in latencies.
-        // TODO:  Request results
-        if reset {
-            // TODO:  reset stats.
-        }
-        return result
-    }
+    
 
     func runClient(context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>) -> EventLoopFuture<(StreamEvent<Grpc_Testing_ClientArgs>) -> Void> {
         context.logger.info("runClient stream started")
@@ -131,17 +117,23 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                     case .mark(let mark):
                         // TODO:  Capture stats
                         context.logger.info("client mark requested")
-                        let clientStatus = WorkerServiceImpl.dummyClientStatus(reset: mark.reset)
-                        context.sendResponse(clientStatus)
+                        guard let runningClient = self.runningClient else {
+                            context.logger.error("client not running")
+                            context.statusPromise.fail(GRPCStatus(code: GRPCStatus.Code.failedPrecondition,
+                                                                  message: "Client not running"))
+                            return
+                        }
+                        runningClient.sendStatus(reset: mark.reset, context: context)
                     }
                 }
             case .end:
                 context.logger.info("runClient ended")
                 // TODO:  Shutdown
+                self.runningClient = nil
                 context.statusPromise.succeed(.ok)
             }
         })
-        
+
      /*   Status RunClient(
               ServerContext* ctx,
               ServerReaderWriter<ClientStatus, ClientArgs>* stream) override {
@@ -242,7 +234,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
     private func runClientBody(context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>,
                                clientConfig: Grpc_Testing_ClientConfig) {
         do {
-            try WorkerServiceImpl.createClient(context: context, clientConfig: clientConfig)
+            self.runningClient = try WorkerServiceImpl.createClient(context: context, clientConfig: clientConfig)
         }
         catch {
             context.statusPromise.fail(error)
@@ -250,7 +242,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
     }
 
     private static func createClient(context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>,
-                                     clientConfig: Grpc_Testing_ClientConfig) throws {
+                                     clientConfig: Grpc_Testing_ClientConfig) throws -> QpsClient {
         switch clientConfig.clientType {
         case .syncClient:
             throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
@@ -260,12 +252,14 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                 case .bytebufParams(_):
                     throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
                 case .simpleParams(_):
-                    try createAsyncClient(config: clientConfig)
+                    return try createAsyncClient(config: clientConfig)
                 case .complexParams(_):
-                    try createAsyncClient(config: clientConfig)
+                    return try createAsyncClient(config: clientConfig)
                 }
             }
             // TODO:  else what?
+            // This is defaulted in C++
+            throw GRPCStatus(code: .unimplemented, message: "Client without payload config")
         case .otherClient:
             throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
         case .callbackClient:

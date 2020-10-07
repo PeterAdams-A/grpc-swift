@@ -18,6 +18,7 @@ import NIO
 import GRPC
 import Logging
 import Foundation
+import NIOConcurrencyHelpers
 
 /*
  template <class StubType, class RequestType>
@@ -206,6 +207,10 @@ class AsyncQpsClient {
 
 }
 
+protocol QpsClient {
+    func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>)
+}
+
 // Setup threads.
 // tee workers onto each.
 // use client impl to send
@@ -214,17 +219,60 @@ class AsyncQpsClient {
 // need to look at the histogram stuff.
 
 
-final class AsyncUnaryQpsClient: AsyncQpsClient{
+final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
     let requestRepeater: RequestRepeater
+    private var latencyHistogram: Histogram
+    private let histogramLock: Lock
 
     init(config: Grpc_Testing_ClientConfig) {
         let threads = AsyncQpsClient.threadsToUse(config: config)
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threads)
         self.requestRepeater = AsyncUnaryQpsClient.makeRequestRepeater(config: config, elg: eventLoopGroup)
+        self.latencyHistogram = Histogram()
+        self.histogramLock = Lock()
         super.init(threads: threads, eventLoopGroup: eventLoopGroup)
 
         // Start the train.
-        self.requestRepeater.start()
+        self.requestRepeater.start(recordLatency: { latency in
+            // TODO:  Periodic capture if requested.
+            self.histogramLock.withLock { self.latencyHistogram.add(value: latency * 1e9) }
+        })
+    }
+
+    // TODO:  See Client::Mark
+    func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>) {
+        var result = Grpc_Testing_ClientStatus()
+        result.stats.timeElapsed = 0
+        result.stats.timeSystem = 0
+        result.stats.timeUser = 0
+        result.stats.cqPollCount = 0
+        // TODO:  Histograms and metrics into result.stats.coreStats.
+        // TODO:  Fill in latencies.
+        // Latencies
+        // Need to ask the other thread to give us the data (or use locks)
+        /* let latencies = requestRepeater.connection.eventLoop.submit({ () -> Histogram in
+            let result = self.latencyHistogram
+            // TODO:  Need to swap in new?
+            return result
+        }).hop(to: context.eventLoop).map({ histogram -> Void in
+            result.stats.latencies = Grpc_Testing_HistogramData(from: histogram)
+            self.logger.info("Sending response")
+            context.sendResponse(result)
+        }) */
+
+        let latencies = self.histogramLock.withLock {
+            return self.latencyHistogram
+        }
+        result.stats.latencies = Grpc_Testing_HistogramData(from: latencies)
+        self.logger.info("Sending response")
+        context.sendResponse(result)
+
+        // EventLoopFuture fold to join.
+
+        // TODO:  Request results
+        if reset {
+            // TODO:  reset stats.
+        }
     }
 
     private static func makeRequestRepeater(config : Grpc_Testing_ClientConfig,
@@ -239,20 +287,25 @@ final class AsyncUnaryQpsClient: AsyncQpsClient{
             .connect(host: String(host), port: port)
 
         let client = Grpc_Testing_BenchmarkServiceClient(channel: channel)
-        return RequestRepeater(client: client, payloadConfig: config.payloadConfig)
+        return RequestRepeater(connection: channel, client: client, payloadConfig: config.payloadConfig)
     }
 
     class RequestRepeater {
+        let connection: ClientConnection
         let client: Grpc_Testing_BenchmarkServiceClient
         let payloadConfig: Grpc_Testing_PayloadConfig
         let logger = Logger(label: "RequestRepeater")
 
-        init(client: Grpc_Testing_BenchmarkServiceClient, payloadConfig: Grpc_Testing_PayloadConfig) {
+        init(connection: ClientConnection,
+             client: Grpc_Testing_BenchmarkServiceClient,
+             payloadConfig: Grpc_Testing_PayloadConfig) {
+            self.connection = connection
             self.client = client
             self.payloadConfig = payloadConfig
         }
 
-        private func makeRequestAndRepeat() throws {
+        private func makeRequestAndRepeat(recordLatency: @escaping (TimeInterval) -> Void) throws {
+            let start = grpcTimeNow()
             let request = try RequestRepeater.createClientRequest(payloadConfig: self.payloadConfig)
             let result = client.unaryCall(request)
             // TODO:  I think C++ allows a pool of outstanding requests here.
@@ -260,7 +313,9 @@ final class AsyncUnaryQpsClient: AsyncQpsClient{
             // For now just keep going forever.
             result.status.map { status in
                 if status.isOk {
-                    try! self.makeRequestAndRepeat()
+                    let end = grpcTimeNow()
+                    recordLatency(end.timeIntervalSince(start))
+                    try! self.makeRequestAndRepeat(recordLatency: recordLatency)
                 } else {
                     self.logger.error("Bad status from unary request", metadata: ["status": "\(status)"])
                 }
@@ -315,8 +370,8 @@ final class AsyncUnaryQpsClient: AsyncQpsClient{
              */
         }
 
-        func start() {
-            try! makeRequestAndRepeat()
+        func start(recordLatency: @escaping (TimeInterval) -> Void) {
+            try! makeRequestAndRepeat(recordLatency: recordLatency)
         }
 
     }
@@ -348,7 +403,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient{
      */
 }
 
-func createAsyncClient(config : Grpc_Testing_ClientConfig) throws -> AsyncQpsClient {
+func createAsyncClient(config : Grpc_Testing_ClientConfig) throws -> QpsClient {
     /* std::unique_ptr<Client> CreateAsyncClient(const ClientConfig& config) {
      switch (config.rpc_type()) {
        case UNARY:
