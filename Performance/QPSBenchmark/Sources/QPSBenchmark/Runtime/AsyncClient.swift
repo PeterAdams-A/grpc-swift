@@ -228,8 +228,12 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
 
     init(config: Grpc_Testing_ClientConfig) {
         let threads = AsyncQpsClient.threadsToUse(config: config)
+        // TODO:  READ THE COMMENT config.clientChannels
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threads)
-        self.requestRepeater = AsyncUnaryQpsClient.makeRequestRepeater(config: config, elg: eventLoopGroup)
+        let serverTargets = try! AsyncUnaryQpsClient.parseServerTargets(serverTargets: config.serverTargets)
+        self.requestRepeater = AsyncUnaryQpsClient.makeRequestRepeater(target: serverTargets.first!,
+                                                                       config: config,
+                                                                       elg: eventLoopGroup)
         self.latencyHistogram = Histogram()
         self.histogramLock = Lock()
         super.init(threads: threads, eventLoopGroup: eventLoopGroup)
@@ -291,19 +295,34 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         repeaterStopped.cascade(to: promise)
     }
 
-    private static func makeRequestRepeater(config : Grpc_Testing_ClientConfig,
+    private static func makeRequestRepeater(target: HostAndPort,
+                                            config : Grpc_Testing_ClientConfig,
                                             elg: EventLoopGroup) -> RequestRepeater {
-        let firstTarget = config.serverTargets.first!
-        let splitIndex = firstTarget.lastIndex(of: ":")!
-        let host = firstTarget[..<splitIndex]
-        let portString = firstTarget[(firstTarget.index(after: splitIndex))...]
-        let port = Int(portString)!
-
         let channel = ClientConnection.insecure(group: elg)
-            .connect(host: String(host), port: port)
+            .connect(host: target.host, port: target.port)
 
         let client = Grpc_Testing_BenchmarkServiceClient(channel: channel)
         return RequestRepeater(connection: channel, client: client, payloadConfig: config.payloadConfig)
+    }
+
+    struct HostAndPort {
+        var host: String
+        var port: Int
+    }
+
+    struct ServerTargetParseError: Error {}
+
+    private static func parseServerTargets(serverTargets: [String]) throws -> [HostAndPort] {
+        try serverTargets.map { target in
+            if let splitIndex = target.lastIndex(of: ":") {
+                let host = target[..<splitIndex]
+                let portString = target[(target.index(after: splitIndex))...]
+                if let port = Int(portString) {
+                    return HostAndPort(host: String(host), port: port)
+                }
+            }
+            throw ServerTargetParseError()
+        }
     }
 
     class RequestRepeater {
@@ -376,27 +395,6 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
                 result.payload.type = .compressable
                 return result
             }
-            /*
-             if (payload_config.has_bytebuf_params()) {
-                   GPR_ASSERT(false);  // not appropriate for this specialization
-                 } else if (payload_config.has_simple_params()) {
-                   req->set_response_type(grpc::testing::PayloadType::COMPRESSABLE);
-                   req->set_response_size(payload_config.simple_params().resp_size());
-                   req->mutable_payload()->set_type(
-                       grpc::testing::PayloadType::COMPRESSABLE);
-                   int size = payload_config.simple_params().req_size();
-                   std::unique_ptr<char[]> body(new char[size]);
-                   req->mutable_payload()->set_body(body.get(), size);
-                 } else if (payload_config.has_complex_params()) {
-                   GPR_ASSERT(false);  // not appropriate for this specialization
-                 } else {
-                   // default should be simple proto without payloads
-                   req->set_response_type(grpc::testing::PayloadType::COMPRESSABLE);
-                   req->set_response_size(0);
-                   req->mutable_payload()->set_type(
-                       grpc::testing::PayloadType::COMPRESSABLE);
-                 }
-             */
         }
 
         func start(recordLatency: @escaping (TimeInterval) -> Void) {
@@ -412,61 +410,12 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
             }
             return self.stopComplete.futureResult
         }
-
     }
-/*
-     explicit AsyncUnaryClient(const ClientConfig& config)
-           : AsyncClient<BenchmarkService::Stub, SimpleRequest>(
-                 config, SetupCtx, BenchmarkStubCreator) {
-         StartThreads(num_async_threads_);
-       }
-       ~AsyncUnaryClient() override {}
-
-      private:
-       static void CheckDone(const grpc::Status& s, SimpleResponse* /*response*/,
-                             HistogramEntry* entry) {
-         entry->set_status(s.error_code());
-       }
-       static std::unique_ptr<grpc::ClientAsyncResponseReader<SimpleResponse>>
-       PrepareReq(BenchmarkService::Stub* stub, grpc::ClientContext* ctx,
-                  const SimpleRequest& request, CompletionQueue* cq) {
-         return stub->PrepareAsyncUnaryCall(ctx, request, cq);
-       };
-       static ClientRpcContext* SetupCtx(BenchmarkService::Stub* stub,
-                                         std::function<gpr_timespec()> next_issue,
-                                         const SimpleRequest& req) {
-         return new ClientRpcContextUnaryImpl<SimpleRequest, SimpleResponse>(
-             stub, req, std::move(next_issue), AsyncUnaryClient::PrepareReq,
-             AsyncUnaryClient::CheckDone);
-       }
-     */
 }
 
 func createAsyncClient(config : Grpc_Testing_ClientConfig) throws -> QpsClient {
-    /* std::unique_ptr<Client> CreateAsyncClient(const ClientConfig& config) {
-     switch (config.rpc_type()) {
-       case UNARY:
-         return std::unique_ptr<Client>(new AsyncUnaryClient(config));
-       case STREAMING:
-         return std::unique_ptr<Client>(new AsyncStreamingPingPongClient(config));
-       case STREAMING_FROM_CLIENT:
-         return std::unique_ptr<Client>(
-             new AsyncStreamingFromClientClient(config));
-       case STREAMING_FROM_SERVER:
-         return std::unique_ptr<Client>(
-             new AsyncStreamingFromServerClient(config));
-       case STREAMING_BOTH_WAYS:
-         // TODO(vjpai): Implement this
-         assert(false);
-         return nullptr;
-       default:
-         assert(false);
-         return nullptr;
-     }
-   }*/
     switch config.rpcType {    
     case .unary:
-        // throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
         return AsyncUnaryQpsClient(config: config)
     case .streaming:
         throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
