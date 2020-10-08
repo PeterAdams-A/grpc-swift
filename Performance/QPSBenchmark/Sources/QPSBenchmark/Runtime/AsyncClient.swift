@@ -209,6 +209,8 @@ class AsyncQpsClient {
 
 protocol QpsClient {
     func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>)
+
+    func shutdown(promise: EventLoopPromise<Void>)
 }
 
 // Setup threads.
@@ -275,6 +277,20 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         }
     }
 
+    func shutdown(promise: EventLoopPromise<Void>) {
+        let repeaterStopped = self.requestRepeater.stop()
+        repeaterStopped.always { result in
+            self.eventLoopGroup.shutdownGracefully { error in
+                if let error = error {
+                    promise.fail(error)
+                } else {
+                    promise.succeed(())
+                }
+            }
+        }
+        repeaterStopped.cascade(to: promise)
+    }
+
     private static func makeRequestRepeater(config : Grpc_Testing_ClientConfig,
                                             elg: EventLoopGroup) -> RequestRepeater {
         let firstTarget = config.serverTargets.first!
@@ -296,28 +312,41 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         let payloadConfig: Grpc_Testing_PayloadConfig
         let logger = Logger(label: "RequestRepeater")
 
+        private var stopRequested = false
+        private var stopComplete: EventLoopPromise<Void>
+        private var numberOfOutstandingRequests = 0
+
         init(connection: ClientConnection,
              client: Grpc_Testing_BenchmarkServiceClient,
              payloadConfig: Grpc_Testing_PayloadConfig) {
             self.connection = connection
             self.client = client
             self.payloadConfig = payloadConfig
+            self.stopComplete = connection.eventLoop.makePromise()
         }
 
         private func makeRequestAndRepeat(recordLatency: @escaping (TimeInterval) -> Void) throws {
+            if self.stopRequested {
+                return
+            }
             let start = grpcTimeNow()
             let request = try RequestRepeater.createClientRequest(payloadConfig: self.payloadConfig)
+            self.numberOfOutstandingRequests += 1
             let result = client.unaryCall(request)
             // TODO:  I think C++ allows a pool of outstanding requests here.
             // TODO:  Set function to run on finished.
             // For now just keep going forever.
             result.status.map { status in
+                self.numberOfOutstandingRequests -= 1
                 if status.isOk {
                     let end = grpcTimeNow()
                     recordLatency(end.timeIntervalSince(start))
                     try! self.makeRequestAndRepeat(recordLatency: recordLatency)
                 } else {
                     self.logger.error("Bad status from unary request", metadata: ["status": "\(status)"])
+                }
+                if self.stopRequested && self.numberOfOutstandingRequests == 0 {
+                    self.stopComplete.succeed(())
                 }
             }
         }
@@ -372,6 +401,13 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
 
         func start(recordLatency: @escaping (TimeInterval) -> Void) {
             try! makeRequestAndRepeat(recordLatency: recordLatency)
+        }
+
+        func stop() -> EventLoopFuture<Void> {
+            self.connection.eventLoop.execute {
+                self.stopRequested = true
+            }
+            return self.stopComplete.futureResult
         }
 
     }

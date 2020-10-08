@@ -129,8 +129,17 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
             case .end:
                 context.logger.info("runClient ended")
                 // TODO:  Shutdown
-                self.runningClient = nil
-                context.statusPromise.succeed(.ok)
+                if let runningClient = self.runningClient {
+                    self.runningClient = nil
+                    let shutdownPromise: EventLoopPromise<Void> = context.eventLoop.makePromise()
+                    runningClient.shutdown(promise: shutdownPromise)
+                    shutdownPromise.futureResult.map { () in
+                        return GRPCStatus(code: .ok, message: nil)
+                    }.cascade(to: context.statusPromise)
+
+                } else {
+                    context.statusPromise.succeed(.ok)
+                }
             }
         })
 
