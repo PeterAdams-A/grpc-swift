@@ -87,7 +87,7 @@ struct Histogram {
     }
 
     mutating func merge(source: Histogram) throws {
-        guard (self.buckets.count != source.buckets.count) || (self.multiplier != source.multiplier) else {
+        guard (self.buckets.count == source.buckets.count) || (self.multiplier == source.multiplier) else {
             // Fail because these histograms don't match.
             throw HistorgramShapeMismatch()
         }

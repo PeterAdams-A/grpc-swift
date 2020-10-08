@@ -212,6 +212,22 @@ protocol QpsClient {
     func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void>
 }
 
+// Histogram with access controlled by a lock -
+// I tried implemented with event loop hopping but the driver refuses to wait shutting
+// the connection immediately after the request.
+struct HistogramWithLock {
+    private var data = Histogram()
+    private let lock = Lock()
+
+    mutating func add(value: Double) {
+        self.lock.withLock { self.data.add(value: value) }
+    }
+
+    func copyData() -> Histogram {
+        return self.lock.withLock { return self.data }
+    }
+}
+
 // Setup threads.
 // tee workers onto each.
 // use client impl to send
@@ -222,12 +238,10 @@ protocol QpsClient {
 
 final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
     let channelRepeaters: [ChannelRepeater]
-    private var latencyHistogram: Histogram
-    private let histogramLock: Lock
+
 
     init(config: Grpc_Testing_ClientConfig) {
         let threads = AsyncQpsClient.threadsToUse(config: config)
-        // TODO:  READ THE COMMENT config.clientChannels
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threads)
         let serverTargets = try! AsyncUnaryQpsClient.parseServerTargets(serverTargets: config.serverTargets)
 
@@ -240,16 +254,11 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         }
         self.channelRepeaters = channelRepeaters
 
-        self.latencyHistogram = Histogram()
-        self.histogramLock = Lock()
         super.init(threads: threads, eventLoopGroup: eventLoopGroup)
 
         // Start the train.
         for channelRepeater in self.channelRepeaters {
-            channelRepeater.start(recordLatency: { latency in
-                // TODO:  Periodic capture if requested.
-                self.histogramLock.withLock { self.latencyHistogram.add(value: latency * 1e9) }
-            })
+            channelRepeater.start()
         }
     }
 
@@ -261,29 +270,15 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         result.stats.timeUser = 0
         result.stats.cqPollCount = 0
         // TODO:  Histograms and metrics into result.stats.coreStats.
-        // TODO:  Fill in latencies.
-        // Latencies
-        // Need to ask the other thread to give us the data (or use locks)
-        /* let latencies = requestRepeater.connection.eventLoop.submit({ () -> Histogram in
-            let result = self.latencyHistogram
-            // TODO:  Need to swap in new?
-            return result
-        }).hop(to: context.eventLoop).map({ histogram -> Void in
-            result.stats.latencies = Grpc_Testing_HistogramData(from: histogram)
-            self.logger.info("Sending response")
-            context.sendResponse(result)
-        }) */
 
-        let latencies = self.histogramLock.withLock {
-            return self.latencyHistogram
+        var latencyHistogram = Histogram()
+        for channelRepeater in self.channelRepeaters {
+            try! latencyHistogram.merge(source: channelRepeater.getLatencyData())
         }
-        result.stats.latencies = Grpc_Testing_HistogramData(from: latencies)
+        result.stats.latencies = Grpc_Testing_HistogramData(from: latencyHistogram)
         self.logger.info("Sending response")
         context.sendResponse(result)
 
-        // EventLoopFuture fold to join.
-
-        // TODO:  Request results
         if reset {
             // TODO:  reset stats.
         }
@@ -332,6 +327,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         let client: Grpc_Testing_BenchmarkServiceClient
         let payloadConfig: Grpc_Testing_PayloadConfig
         let logger = Logger(label: "ChannelRepeater")
+        private var latencyHistogram: HistogramWithLock
 
         private var stopRequested = false
         private var stopComplete: EventLoopPromise<Void>
@@ -345,9 +341,10 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
             self.client = Grpc_Testing_BenchmarkServiceClient(channel: connection)
             self.payloadConfig = config.payloadConfig
             self.stopComplete = connection.eventLoop.makePromise()
+            self.latencyHistogram = HistogramWithLock()
         }
 
-        private func makeRequestAndRepeat(recordLatency: @escaping (TimeInterval) -> Void) throws {
+        private func makeRequestAndRepeat() throws {
             if self.stopRequested {
                 return
             }
@@ -362,8 +359,8 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
                 self.numberOfOutstandingRequests -= 1
                 if status.isOk {
                     let end = grpcTimeNow()
-                    recordLatency(end.timeIntervalSince(start))
-                    try! self.makeRequestAndRepeat(recordLatency: recordLatency)
+                    self.recordLatency(end.timeIntervalSince(start))
+                    try! self.makeRequestAndRepeat()
                 } else {
                     self.logger.error("Bad status from unary request", metadata: ["status": "\(status)"])
                 }
@@ -371,6 +368,14 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
                     self.stopComplete.succeed(())
                 }
             }
+        }
+
+        private func recordLatency(_ latency: TimeInterval) {
+            self.latencyHistogram.add(value: latency * 1e9)
+        }
+
+        func getLatencyData() -> Histogram {
+            return self.latencyHistogram.copyData()
         }
 
         static func createClientRequest(payloadConfig: Grpc_Testing_PayloadConfig) throws -> Grpc_Testing_SimpleRequest {
@@ -400,8 +405,8 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
             }
         }
 
-        func start(recordLatency: @escaping (TimeInterval) -> Void) {
-            try! makeRequestAndRepeat(recordLatency: recordLatency)
+        func start() {
+            try! makeRequestAndRepeat()
         }
 
         func stop() -> EventLoopFuture<Void> {
