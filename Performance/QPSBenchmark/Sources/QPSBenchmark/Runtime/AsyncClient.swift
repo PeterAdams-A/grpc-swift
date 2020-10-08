@@ -290,11 +290,13 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
     }
 
     func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void> {
+        let promise: EventLoopPromise<Void> = callbackLoop.makePromise()
         let stoppedFutures = self.channelRepeaters.map { repeater in repeater.stop() }
-        return EventLoopFuture<Void>.reduce((), stoppedFutures, on: callbackLoop, { (x, y) -> Void in return () } )
-        /* let repeaterStopped = self.requestRepeater.stop()
-        repeaterStopped.always { result in
-            self.eventLoopGroup.shutdownGracefully { error in
+        let allStopped = EventLoopFuture<Void>.reduce((),
+                                                      stoppedFutures,
+                                                      on: callbackLoop, { (_, _) -> Void in return () } )
+        allStopped.always { result in
+            return self.eventLoopGroup.shutdownGracefully { error in
                 if let error = error {
                     promise.fail(error)
                 } else {
@@ -302,7 +304,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
                 }
             }
         }
-        repeaterStopped.cascade(to: promise)*/
+        return promise.futureResult
     }
 
     struct HostAndPort {
