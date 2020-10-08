@@ -204,13 +204,12 @@ class AsyncQpsClient {
     static func threadsToUse(config: Grpc_Testing_ClientConfig) -> Int {
         return config.asyncClientThreads > 0 ? Int(config.asyncClientThreads) : System.coreCount
     }
-
 }
 
 protocol QpsClient {
     func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>)
 
-    func shutdown(promise: EventLoopPromise<Void>)
+    func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void>
 }
 
 // Setup threads.
@@ -222,7 +221,7 @@ protocol QpsClient {
 
 
 final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
-    let requestRepeater: RequestRepeater
+    let channelRepeaters: [ChannelRepeater]
     private var latencyHistogram: Histogram
     private let histogramLock: Lock
 
@@ -231,18 +230,27 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         // TODO:  READ THE COMMENT config.clientChannels
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threads)
         let serverTargets = try! AsyncUnaryQpsClient.parseServerTargets(serverTargets: config.serverTargets)
-        self.requestRepeater = AsyncUnaryQpsClient.makeRequestRepeater(target: serverTargets.first!,
-                                                                       config: config,
-                                                                       elg: eventLoopGroup)
+
+        precondition(serverTargets.count > 0)
+        var channelRepeaters: [ChannelRepeater] = []
+        for channelNumber in 0..<Int(config.clientChannels) {
+            channelRepeaters.append(ChannelRepeater(target: serverTargets[channelNumber % serverTargets.count],
+                                                    config: config,
+                                                    elg: eventLoopGroup))
+        }
+        self.channelRepeaters = channelRepeaters
+
         self.latencyHistogram = Histogram()
         self.histogramLock = Lock()
         super.init(threads: threads, eventLoopGroup: eventLoopGroup)
 
         // Start the train.
-        self.requestRepeater.start(recordLatency: { latency in
-            // TODO:  Periodic capture if requested.
-            self.histogramLock.withLock { self.latencyHistogram.add(value: latency * 1e9) }
-        })
+        for channelRepeater in self.channelRepeaters {
+            channelRepeater.start(recordLatency: { latency in
+                // TODO:  Periodic capture if requested.
+                self.histogramLock.withLock { self.latencyHistogram.add(value: latency * 1e9) }
+            })
+        }
     }
 
     // TODO:  See Client::Mark
@@ -281,8 +289,10 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         }
     }
 
-    func shutdown(promise: EventLoopPromise<Void>) {
-        let repeaterStopped = self.requestRepeater.stop()
+    func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void> {
+        let stoppedFutures = self.channelRepeaters.map { repeater in repeater.stop() }
+        return EventLoopFuture<Void>.reduce((), stoppedFutures, on: callbackLoop, { (x, y) -> Void in return () } )
+        /* let repeaterStopped = self.requestRepeater.stop()
         repeaterStopped.always { result in
             self.eventLoopGroup.shutdownGracefully { error in
                 if let error = error {
@@ -292,17 +302,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
                 }
             }
         }
-        repeaterStopped.cascade(to: promise)
-    }
-
-    private static func makeRequestRepeater(target: HostAndPort,
-                                            config : Grpc_Testing_ClientConfig,
-                                            elg: EventLoopGroup) -> RequestRepeater {
-        let channel = ClientConnection.insecure(group: elg)
-            .connect(host: target.host, port: target.port)
-
-        let client = Grpc_Testing_BenchmarkServiceClient(channel: channel)
-        return RequestRepeater(connection: channel, client: client, payloadConfig: config.payloadConfig)
+        repeaterStopped.cascade(to: promise)*/
     }
 
     struct HostAndPort {
@@ -325,22 +325,23 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         }
     }
 
-    class RequestRepeater {
+    class ChannelRepeater {
         let connection: ClientConnection
         let client: Grpc_Testing_BenchmarkServiceClient
         let payloadConfig: Grpc_Testing_PayloadConfig
-        let logger = Logger(label: "RequestRepeater")
+        let logger = Logger(label: "ChannelRepeater")
 
         private var stopRequested = false
         private var stopComplete: EventLoopPromise<Void>
         private var numberOfOutstandingRequests = 0
 
-        init(connection: ClientConnection,
-             client: Grpc_Testing_BenchmarkServiceClient,
-             payloadConfig: Grpc_Testing_PayloadConfig) {
-            self.connection = connection
-            self.client = client
-            self.payloadConfig = payloadConfig
+        init(target: HostAndPort,
+             config : Grpc_Testing_ClientConfig,
+             elg: EventLoopGroup) {
+            self.connection = ClientConnection.insecure(group: elg)
+                .connect(host: target.host, port: target.port)
+            self.client = Grpc_Testing_BenchmarkServiceClient(channel: connection)
+            self.payloadConfig = config.payloadConfig
             self.stopComplete = connection.eventLoop.makePromise()
         }
 
@@ -349,7 +350,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
                 return
             }
             let start = grpcTimeNow()
-            let request = try RequestRepeater.createClientRequest(payloadConfig: self.payloadConfig)
+            let request = try ChannelRepeater.createClientRequest(payloadConfig: self.payloadConfig)
             self.numberOfOutstandingRequests += 1
             let result = client.unaryCall(request)
             // TODO:  I think C++ allows a pool of outstanding requests here.

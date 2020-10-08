@@ -131,9 +131,8 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                 // TODO:  Shutdown
                 if let runningClient = self.runningClient {
                     self.runningClient = nil
-                    let shutdownPromise: EventLoopPromise<Void> = context.eventLoop.makePromise()
-                    runningClient.shutdown(promise: shutdownPromise)
-                    shutdownPromise.futureResult.map { () in
+                    let shutdownFuture = runningClient.shutdown(callbackLoop: context.eventLoop)
+                    shutdownFuture.map { () in
                         return GRPCStatus(code: .ok, message: nil)
                     }.cascade(to: context.statusPromise)
 
