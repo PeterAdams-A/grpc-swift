@@ -406,6 +406,9 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         func stop() -> EventLoopFuture<Void> {
             self.connection.eventLoop.execute {
                 self.stopRequested = true
+                if self.numberOfOutstandingRequests == 0 {
+                    self.stopComplete.succeed(())
+                }
             }
             return self.stopComplete.futureResult
         }
