@@ -63,8 +63,14 @@ struct StatsWithLock {
         self.lock.withLock { self.data.latencies.add(value: latency) }
     }
 
-    func copyData() -> Stats {
-        return self.lock.withLock { return self.data }
+    mutating func copyData(reset: Bool) -> Stats {
+        return self.lock.withLock {
+            let result = self.data
+            if reset {
+                self.data = Stats()
+            }
+            return result
+        }
     }
 }
 
@@ -79,11 +85,15 @@ struct StatsWithLock {
 final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
     let channelRepeaters: [ChannelRepeater]
 
+    var statsPeriodStart: Date
+
 
     init(config: Grpc_Testing_ClientConfig) {
         let threads = AsyncQpsClient.threadsToUse(config: config)
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threads)
         let serverTargets = try! AsyncUnaryQpsClient.parseServerTargets(serverTargets: config.serverTargets)
+
+        self.statsPeriodStart = grpcTimeNow()
 
         precondition(serverTargets.count > 0)
         var channelRepeaters: [ChannelRepeater] = []
@@ -104,17 +114,17 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
 
     // TODO:  See Client::Mark
     func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>) {
+        let currentTime = grpcTimeNow()
         var result = Grpc_Testing_ClientStatus()
-        result.stats.timeElapsed = 0
+        result.stats.timeElapsed = currentTime.timeIntervalSince(self.statsPeriodStart)
         result.stats.timeSystem = 0
         result.stats.timeUser = 0
         result.stats.cqPollCount = 0
-        // TODO:  Histograms and metrics into result.stats.coreStats.
 
         var latencyHistogram = Histogram()
         var statusCounts = StatusCounts()
         for channelRepeater in self.channelRepeaters {
-            let stats = channelRepeater.getStats()
+            let stats = channelRepeater.getStats(reset: reset)
             try! latencyHistogram.merge(source: stats.latencies)
             statusCounts.merge(source: stats.statuses)
         }
@@ -124,7 +134,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         context.sendResponse(result)
 
         if reset {
-            // TODO:  reset stats.
+            self.statsPeriodStart = currentTime
         }
     }
 
@@ -229,8 +239,8 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
             self.stats.add(latency: latency * 1e9)
         }
 
-        func getStats() -> Stats {
-            return self.stats.copyData()
+        func getStats(reset: Bool) -> Stats {
+            return self.stats.copyData(reset: reset)
         }
 
         static func createClientRequest(payloadConfig: Grpc_Testing_PayloadConfig) throws -> Grpc_Testing_SimpleRequest {
