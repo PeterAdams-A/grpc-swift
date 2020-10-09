@@ -86,6 +86,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
     let channelRepeaters: [ChannelRepeater]
 
     var statsPeriodStart: Date
+    var cpuStatsPeriodStart: CPUTime
 
 
     init(config: Grpc_Testing_ClientConfig) {
@@ -94,6 +95,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         let serverTargets = try! AsyncUnaryQpsClient.parseServerTargets(serverTargets: config.serverTargets)
 
         self.statsPeriodStart = grpcTimeNow()
+        self.cpuStatsPeriodStart = getResourceUsage()
 
         precondition(serverTargets.count > 0)
         var channelRepeaters: [ChannelRepeater] = []
@@ -115,10 +117,11 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
     // TODO:  See Client::Mark
     func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>) {
         let currentTime = grpcTimeNow()
+        let currentResourceUsage = getResourceUsage()
         var result = Grpc_Testing_ClientStatus()
         result.stats.timeElapsed = currentTime.timeIntervalSince(self.statsPeriodStart)
-        result.stats.timeSystem = 0
-        result.stats.timeUser = 0
+        result.stats.timeSystem = currentResourceUsage.systemTime - self.cpuStatsPeriodStart.systemTime
+        result.stats.timeUser = currentResourceUsage.userTime - self.cpuStatsPeriodStart.userTime
         result.stats.cqPollCount = 0
 
         var latencyHistogram = Histogram()
@@ -135,6 +138,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
 
         if reset {
             self.statsPeriodStart = currentTime
+            self.cpuStatsPeriodStart = currentResourceUsage
         }
     }
 
