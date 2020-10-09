@@ -20,162 +20,9 @@ import Logging
 import Foundation
 import NIOConcurrencyHelpers
 
-/*
- template <class StubType, class RequestType>
- class AsyncClient : public ClientImpl<StubType, RequestType> {
-   // Specify which protected members we are using since there is no
-   // member name resolution until the template types are fully resolved
-  public:
-   using Client::closed_loop_;
-   using Client::NextIssuer;
-   using Client::SetupLoadTest;
-   using ClientImpl<StubType, RequestType>::cores_;
-   using ClientImpl<StubType, RequestType>::channels_;
-   using ClientImpl<StubType, RequestType>::request_;
-   AsyncClient(const ClientConfig& config,
-               std::function<ClientRpcContext*(
-                   StubType*, std::function<gpr_timespec()> next_issue,
-                   const RequestType&)>
-                   setup_ctx,
-               std::function<std::unique_ptr<StubType>(std::shared_ptr<Channel>)>
-                   create_stub)
-       : ClientImpl<StubType, RequestType>(config, create_stub),
-         num_async_threads_(NumThreads(config)) {
-     SetupLoadTest(config, num_async_threads_);
-
-     int tpc = std::max(1, config.threads_per_cq());      // 1 if unspecified
-     int num_cqs = (num_async_threads_ + tpc - 1) / tpc;  // ceiling operator
-     for (int i = 0; i < num_cqs; i++) {
-       cli_cqs_.emplace_back(new CompletionQueue);
-     }
-
-     for (int i = 0; i < num_async_threads_; i++) {
-       cq_.emplace_back(i % cli_cqs_.size());
-       next_issuers_.emplace_back(NextIssuer(i));
-       shutdown_state_.emplace_back(new PerThreadShutdownState());
-     }
-
-     int t = 0;
-     for (int ch = 0; ch < config.client_channels(); ch++) {
-       for (int i = 0; i < config.outstanding_rpcs_per_channel(); i++) {
-         auto* cq = cli_cqs_[t].get();
-         auto ctx =
-             setup_ctx(channels_[ch].get_stub(), next_issuers_[t], request_);
-         ctx->Start(cq, config);
-       }
-       t = (t + 1) % cli_cqs_.size();
-     }
-   }
-   virtual ~AsyncClient() {
-     for (auto cq = cli_cqs_.begin(); cq != cli_cqs_.end(); cq++) {
-       void* got_tag;
-       bool ok;
-       while ((*cq)->Next(&got_tag, &ok)) {
-         delete ClientRpcContext::detag(got_tag);
-       }
-     }
-   }
-
-   int GetPollCount() override {
-     int count = 0;
-     for (auto cq = cli_cqs_.begin(); cq != cli_cqs_.end(); cq++) {
-       count += grpc_get_cq_poll_num((*cq)->cq());
-     }
-     return count;
-   }
-
-  protected:
-   const int num_async_threads_;
-
-  private:
-   struct PerThreadShutdownState {
-     mutable std::mutex mutex;
-     bool shutdown;
-     PerThreadShutdownState() : shutdown(false) {}
-   };
-
-   int NumThreads(const ClientConfig& config) {
-     int num_threads = config.async_client_threads();
-     if (num_threads <= 0) {  // Use dynamic sizing
-       num_threads = cores_;
-       gpr_log(GPR_INFO, "Sizing async client to %d threads", num_threads);
-     }
-     return num_threads;
-   }
-   void DestroyMultithreading() override final {
-     for (auto ss = shutdown_state_.begin(); ss != shutdown_state_.end(); ++ss) {
-       std::lock_guard<std::mutex> lock((*ss)->mutex);
-       (*ss)->shutdown = true;
-     }
-     for (auto cq = cli_cqs_.begin(); cq != cli_cqs_.end(); cq++) {
-       (*cq)->Shutdown();
-     }
-     this->EndThreads();  // this needed for resolution
-   }
-
-   ClientRpcContext* ProcessTag(size_t thread_idx, void* tag) {
-     ClientRpcContext* ctx = ClientRpcContext::detag(tag);
-     if (shutdown_state_[thread_idx]->shutdown) {
-       ctx->TryCancel();
-       delete ctx;
-       bool ok;
-       while (cli_cqs_[cq_[thread_idx]]->Next(&tag, &ok)) {
-         ctx = ClientRpcContext::detag(tag);
-         ctx->TryCancel();
-         delete ctx;
-       }
-       return nullptr;
-     }
-     return ctx;
-   }
-
-   void ThreadFunc(size_t thread_idx, Client::Thread* t) override final {
-     void* got_tag;
-     bool ok;
-
-     HistogramEntry entry;
-     HistogramEntry* entry_ptr = &entry;
-     if (!cli_cqs_[cq_[thread_idx]]->Next(&got_tag, &ok)) {
-       return;
-     }
-     std::mutex* shutdown_mu = &shutdown_state_[thread_idx]->mutex;
-     shutdown_mu->lock();
-     ClientRpcContext* ctx = ProcessTag(thread_idx, got_tag);
-     if (ctx == nullptr) {
-       shutdown_mu->unlock();
-       return;
-     }
-     while (cli_cqs_[cq_[thread_idx]]->DoThenAsyncNext(
-         [&, ctx, ok, entry_ptr, shutdown_mu]() {
-           if (!ctx->RunNextState(ok, entry_ptr)) {
-             // The RPC and callback are done, so clone the ctx
-             // and kickstart the new one
-             ctx->StartNewClone(cli_cqs_[cq_[thread_idx]].get());
-             delete ctx;
-           }
-           shutdown_mu->unlock();
-         },
-         &got_tag, &ok, gpr_inf_future(GPR_CLOCK_REALTIME))) {
-       t->UpdateHistogram(entry_ptr);
-       entry = HistogramEntry();
-       shutdown_mu->lock();
-       ctx = ProcessTag(thread_idx, got_tag);
-       if (ctx == nullptr) {
-         shutdown_mu->unlock();
-         return;
-       }
-     }
-   }
-
-   std::vector<std::unique_ptr<CompletionQueue>> cli_cqs_;
-   std::vector<int> cq_;
-   std::vector<std::function<gpr_timespec()>> next_issuers_;
-   std::vector<std::unique_ptr<PerThreadShutdownState>> shutdown_state_;
- };
-
- */
-
 // Note:   ClientImpl contains more logic in C++.
+
+// TODO: config.median_latency_collection_interval_millis
 
 class AsyncQpsClient {
     let eventLoopGroup: MultiThreadedEventLoopGroup
@@ -187,18 +34,6 @@ class AsyncQpsClient {
         self.threads = threads
         self.logger.info("Sizing AsyncQpsClient", metadata: ["threads": "\(threads)"])
         self.eventLoopGroup = eventLoopGroup
-
-        // TODO:  Setup workers based on
-        // config.clientChannels - number of workers.
-        // config.outstandingRpcsPerChannel -
-
-       /* let workerService = AsyncQpsServerImpl()
-
-        // Start the server.
-        self.server = Server.insecure(group: self.eventLoopGroup)
-            .withServiceProviders([workerService])
-            .withLogger(self.logger)
-            .bind(host: "localhost", port: Int(config.port))*/
     }
 
     static func threadsToUse(config: Grpc_Testing_ClientConfig) -> Int {
@@ -212,18 +47,23 @@ protocol QpsClient {
     func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void>
 }
 
-// Histogram with access controlled by a lock -
+struct Stats {
+    var latencies = Histogram()
+    var statuses = StatusCounts()
+}
+
+// Stats with access controlled by a lock -
 // I tried implemented with event loop hopping but the driver refuses to wait shutting
 // the connection immediately after the request.
-struct HistogramWithLock {
-    private var data = Histogram()
+struct StatsWithLock {
+    private var data = Stats()
     private let lock = Lock()
 
-    mutating func add(value: Double) {
-        self.lock.withLock { self.data.add(value: value) }
+    mutating func add(latency: Double) {
+        self.lock.withLock { self.data.latencies.add(value: latency) }
     }
 
-    func copyData() -> Histogram {
+    func copyData() -> Stats {
         return self.lock.withLock { return self.data }
     }
 }
@@ -272,10 +112,14 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         // TODO:  Histograms and metrics into result.stats.coreStats.
 
         var latencyHistogram = Histogram()
+        var statusCounts = StatusCounts()
         for channelRepeater in self.channelRepeaters {
-            try! latencyHistogram.merge(source: channelRepeater.getLatencyData())
+            let stats = channelRepeater.getStats()
+            try! latencyHistogram.merge(source: stats.latencies)
+            statusCounts.merge(source: stats.statuses)
         }
         result.stats.latencies = Grpc_Testing_HistogramData(from: latencyHistogram)
+        result.stats.requestResults = statusCounts.toRequestResultCounts()
         self.logger.info("Sending response")
         context.sendResponse(result)
 
@@ -329,7 +173,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         let logger = Logger(label: "ChannelRepeater")
         let maxPermittedOutstandingRequests: Int
         
-        private var latencyHistogram: HistogramWithLock
+        private var stats: StatsWithLock
 
         private var stopRequested = false
         private var stopComplete: EventLoopPromise<Void>
@@ -344,7 +188,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
             self.payloadConfig = config.payloadConfig
             self.maxPermittedOutstandingRequests = Int(config.outstandingRpcsPerChannel)
             self.stopComplete = connection.eventLoop.makePromise()
-            self.latencyHistogram = HistogramWithLock()
+            self.stats = StatsWithLock()
         }
 
         private func launchRequests() throws {
@@ -382,11 +226,11 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         }
 
         private func recordLatency(_ latency: TimeInterval) {
-            self.latencyHistogram.add(value: latency * 1e9)
+            self.stats.add(latency: latency * 1e9)
         }
 
-        func getLatencyData() -> Histogram {
-            return self.latencyHistogram.copyData()
+        func getStats() -> Stats {
+            return self.stats.copyData()
         }
 
         static func createClientRequest(payloadConfig: Grpc_Testing_PayloadConfig) throws -> Grpc_Testing_SimpleRequest {
