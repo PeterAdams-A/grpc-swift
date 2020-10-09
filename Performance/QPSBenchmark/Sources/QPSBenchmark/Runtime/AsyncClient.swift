@@ -327,6 +327,8 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         let client: Grpc_Testing_BenchmarkServiceClient
         let payloadConfig: Grpc_Testing_PayloadConfig
         let logger = Logger(label: "ChannelRepeater")
+        let maxPermittedOutstandingRequests: Int
+        
         private var latencyHistogram: HistogramWithLock
 
         private var stopRequested = false
@@ -340,12 +342,19 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
                 .connect(host: target.host, port: target.port)
             self.client = Grpc_Testing_BenchmarkServiceClient(channel: connection)
             self.payloadConfig = config.payloadConfig
+            self.maxPermittedOutstandingRequests = Int(config.outstandingRpcsPerChannel)
             self.stopComplete = connection.eventLoop.makePromise()
             self.latencyHistogram = HistogramWithLock()
         }
 
+        private func launchRequests() throws {
+            while !self.stopRequested && self.numberOfOutstandingRequests < self.maxPermittedOutstandingRequests {
+                try makeRequestAndRepeat()
+            }
+        }
+
         private func makeRequestAndRepeat() throws {
-            if self.stopRequested {
+            if self.stopRequested || self.numberOfOutstandingRequests >= self.maxPermittedOutstandingRequests {
                 return
             }
             let start = grpcTimeNow()
@@ -355,6 +364,8 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
             // TODO:  I think C++ allows a pool of outstanding requests here.
             // TODO:  Set function to run on finished.
             // For now just keep going forever.
+            // TODO:  Should probably trigger below regardless of result.
+            // TODO:  Does current implementation alloc?
             result.status.map { status in
                 self.numberOfOutstandingRequests -= 1
                 if status.isOk {
@@ -406,7 +417,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         }
 
         func start() {
-            try! makeRequestAndRepeat()
+            try! self.launchRequests()
         }
 
         private func stopIsComplete() {
