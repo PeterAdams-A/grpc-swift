@@ -365,7 +365,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
                     self.logger.error("Bad status from unary request", metadata: ["status": "\(status)"])
                 }
                 if self.stopRequested && self.numberOfOutstandingRequests == 0 {
-                    self.stopComplete.succeed(())
+                    self.stopIsComplete()
                 }
             }
         }
@@ -409,11 +409,18 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
             try! makeRequestAndRepeat()
         }
 
+        private func stopIsComplete() {
+            assert(self.stopRequested)
+            assert(self.numberOfOutstandingRequests == 0)
+            // Close the connection then signal done.
+            self.connection.close().cascade(to: self.stopComplete)
+        }
+
         func stop() -> EventLoopFuture<Void> {
             self.connection.eventLoop.execute {
                 self.stopRequested = true
                 if self.numberOfOutstandingRequests == 0 {
-                    self.stopComplete.succeed(())
+                    self.stopIsComplete()
                 }
             }
             return self.stopComplete.futureResult
