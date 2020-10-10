@@ -54,8 +54,14 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                     case .mark(let mark):
                         // TODO:  Capture stats
                         context.logger.info("server mark requested")
-                        let serverStatus = WorkerServiceImpl.dummyServerStatus(reset: mark.reset)
-                        context.sendResponse(serverStatus)
+                        guard let runningServer = self.runningServer else {
+                            context.logger.error("server not running")
+                            context.statusPromise.fail(GRPCStatus(code: GRPCStatus.Code.failedPrecondition,
+                                                                  message: "Server not running"))
+                            return
+                        }
+                        runningServer.sendStatus(reset: mark.reset, context: context)
+                        
                     }
                 }
 
@@ -75,22 +81,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
         })
     }
 
-    // TODO:  Find out where the basics are set.
-    static func dummyServerStatus(reset: Bool) -> Grpc_Testing_ServerStatus {
-        var result = Grpc_Testing_ServerStatus()
-        // TODO:  Core stats
-        result.stats.timeElapsed = 0
-        result.stats.timeSystem = 0
-        result.stats.timeUser = 0
-        result.stats.totalCpuTime = 0
-        result.stats.idleCpuTime = 0
-        result.stats.cqPollCount = 0
-        // TODO:  Core stats
-        if reset {
-            // TODO:
-        }
-        return result
-    }
+
 
     
 
@@ -114,7 +105,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                         // Initial status is the default (in C++)
                         context.sendResponse(Grpc_Testing_ClientStatus())
                     case .mark(let mark):
-                        // TODO:  Capture stats
+                        // Capture stats
                         context.logger.info("client mark requested")
                         guard let runningClient = self.runningClient else {
                             context.logger.error("client not running")

@@ -17,9 +17,10 @@
 import NIO
 import GRPC
 import Logging
+import Foundation
 
 protocol QpsServer {
-    // func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>)
+    func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ServerStatus>)
 
     func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void>
 }
@@ -28,6 +29,9 @@ final class AsyncQpsServer: QpsServer {
     let eventLoopGroup: MultiThreadedEventLoopGroup
     let server: EventLoopFuture<Server>
     let threads: Int
+
+    var statsPeriodStart: Date
+    var cpuStatsPeriodStart: CPUTime
 
     var logger = Logger(label: "AsyncQpsServer")
 
@@ -38,6 +42,9 @@ final class AsyncQpsServer: QpsServer {
         self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threads)
         self.threads = threads
 
+        self.statsPeriodStart = grpcTimeNow()
+        self.cpuStatsPeriodStart = getResourceUsage()
+
         let workerService = AsyncQpsServerImpl()
 
         // Start the server.
@@ -45,6 +52,26 @@ final class AsyncQpsServer: QpsServer {
             .withServiceProviders([workerService])
             .withLogger(self.logger)
             .bind(host: "localhost", port: Int(config.port))
+    }
+
+    // See Server::Mark
+    func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ServerStatus>) {
+        let currentTime = grpcTimeNow()
+        let currentResourceUsage = getResourceUsage()
+        var result = Grpc_Testing_ServerStatus()
+        result.stats.timeElapsed = currentTime.timeIntervalSince(self.statsPeriodStart)
+        result.stats.timeSystem = currentResourceUsage.systemTime - self.cpuStatsPeriodStart.systemTime
+        result.stats.timeUser = currentResourceUsage.userTime - self.cpuStatsPeriodStart.userTime
+        result.stats.totalCpuTime = 0
+        result.stats.idleCpuTime = 0
+        result.stats.cqPollCount = 0
+        // TODO:  Core stats
+        self.logger.info("Sending response")
+        context.sendResponse(result)
+        if reset {
+            self.statsPeriodStart = currentTime
+            self.cpuStatsPeriodStart = currentResourceUsage
+        }
     }
 
     func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void> {
