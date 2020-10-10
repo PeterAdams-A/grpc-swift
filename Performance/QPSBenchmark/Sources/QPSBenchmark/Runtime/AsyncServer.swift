@@ -18,7 +18,13 @@ import NIO
 import GRPC
 import Logging
 
-final class AsyncQpsServer {
+protocol QpsServer {
+    // func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>)
+
+    func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void>
+}
+
+final class AsyncQpsServer: QpsServer {
     let eventLoopGroup: MultiThreadedEventLoopGroup
     let server: EventLoopFuture<Server>
     let threads: Int
@@ -39,6 +45,23 @@ final class AsyncQpsServer {
             .withServiceProviders([workerService])
             .withLogger(self.logger)
             .bind(host: "localhost", port: Int(config.port))
+    }
+
+    func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void> {
+        let promise: EventLoopPromise<Void> = callbackLoop.makePromise()
+
+        self.server.map {
+            server in server.close()
+        }.always { result in
+            return self.eventLoopGroup.shutdownGracefully { error in
+                if let error = error {
+                    promise.fail(error)
+                } else {
+                    promise.succeed(())
+                }
+            }
+        }
+        return promise.futureResult
     }
 }
 

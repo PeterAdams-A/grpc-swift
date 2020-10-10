@@ -26,8 +26,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
     let finishedPromise: EventLoopPromise<Void>
     let serverPortOverride: Int?
 
-    // TODO: Sort out types and record.
-    var runningServer: Int? = nil
+    var runningServer: QpsServer? = nil
     var runningClient: QpsClient? = nil
 
     init(finishedPromise: EventLoopPromise<Void>, serverPortOverride: Int?) {
@@ -50,15 +49,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                                                                   message: "Server worker busy"))
                             return
                         }
-                        // TODO:  Scope the next within profile.
-                        /*
-                     ScopedProfile profile("qps_server.prof", false);
-                     Status ret = RunServerBody(ctx, stream);
-                     gpr_log(GPR_INFO, "RunServer: Returning");
-                     return ret;
-                     */
                         self.runServerBody(context: context, serverConfig: serverConfig)
-
 
                     case .mark(let mark):
                         // TODO:  Capture stats
@@ -70,8 +61,16 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
 
             case .end:
                 context.logger.info("runServer stream ended.")
-                self.runningServer = nil    // TODO:  Shutdown?
-                context.statusPromise.succeed(.ok)
+                if let runningServer = self.runningServer {
+                    self.runningServer = nil
+                    let shutdownFuture = runningServer.shutdown(callbackLoop: context.eventLoop)
+                    shutdownFuture.map { () in
+                        return GRPCStatus(code: .ok, message: nil)
+                    }.cascade(to: context.statusPromise)
+
+                } else {
+                    context.statusPromise.succeed(.ok)
+                }
             }
         })
     }
@@ -157,7 +156,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
 
     // MARK: Create Server
     private static func createServer(context: StreamingResponseCallContext<Grpc_Testing_ServerStatus>,
-                                     config : Grpc_Testing_ServerConfig) throws {
+                                     config : Grpc_Testing_ServerConfig) throws -> QpsServer {
         context.logger.info("Starting server", metadata: ["type": .stringConvertible(config.serverType)])
 
         switch config.serverType {
@@ -175,6 +174,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
 
                 context.sendResponse(response)
             }
+            return asyncServer
         case .asyncGenericServer:
             throw GRPCStatus(code: .unimplemented, message: "Server Type not implemented")
         case .otherServer:
@@ -195,9 +195,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
         context.logger.info("RunServerBody: about to create server")
 
         do {
-            try WorkerServiceImpl.createServer(context: context, config: serverConfig)
-
-            var status = Grpc_Testing_ServerStatus()
+            self.runningServer = try WorkerServiceImpl.createServer(context: context, config: serverConfig)
         }
         catch {
             context.statusPromise.fail(error)
