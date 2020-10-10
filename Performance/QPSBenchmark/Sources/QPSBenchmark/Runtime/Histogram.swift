@@ -114,6 +114,6 @@ extension Grpc_Testing_HistogramData {
         self.maxSeen = from.maxSeen
         self.sum = from.sum
         self.sumOfSquares = from.sumOfSquares
-        self.count = Double(self.bucket.count)
+        self.count = from.countOfValuesSeen
     }
 }
