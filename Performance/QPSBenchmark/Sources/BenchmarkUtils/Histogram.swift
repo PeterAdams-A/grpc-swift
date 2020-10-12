@@ -27,11 +27,11 @@ public struct Histogram {
     public private(set) var sum: Double
     public private(set) var sumOfSquares: Double
     public private(set) var countOfValuesSeen: Double
-    public private(set) var multiplier: Double
-    public private(set) var oneOnLogMultiplier: Double
+    private var multiplier: Double
+    private var oneOnLogMultiplier: Double
     public private(set) var minSeen: Double
     public private(set) var maxSeen: Double
-    public private(set) var maxPossible: Double
+    private var maxPossible: Double
     public private(set) var buckets: [UInt32]
 
     public init(resolution: Double = 0.01, maxBucketStart: Double = 60e9) {
