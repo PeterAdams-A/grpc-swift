@@ -18,11 +18,10 @@ import NIO
 import GRPC
 import Foundation
 
+/// Implementation of asynchronous service for benchmarking.
 final class AsyncQpsServerImpl: Grpc_Testing_BenchmarkServiceProvider {
-    // TODO:  In C++ a singleton response is allocated and reused.
-    // Check if that makes sense in swift.
-    // Might make sense to recycle payload.
-
+    /// One request followed by one response.
+    /// The server returns the client payload as-is.
     func unaryCall(request: Grpc_Testing_SimpleRequest,
                    context: StatusOnlyCallContext) -> EventLoopFuture<Grpc_Testing_SimpleResponse> {
         do {
@@ -33,18 +32,25 @@ final class AsyncQpsServerImpl: Grpc_Testing_BenchmarkServiceProvider {
         }
     }
 
+    /// Repeated sequence of one request followed by one response.
+    /// Should be called streaming ping-pong
+    /// The server returns the client payload as-is on each response
     func streamingCall(context: StreamingResponseCallContext<Grpc_Testing_SimpleResponse>) -> EventLoopFuture<(StreamEvent<Grpc_Testing_SimpleRequest>) -> Void> {
         context.logger.warning("streamingCall not implemented yet")
         return context.eventLoop.makeFailedFuture(GRPCStatus(code: GRPCStatus.Code.unimplemented,
                                                              message: "Not implemented"))
     }
 
+    /// Single-sided unbounded streaming from client to server
+    /// The server returns the client payload as-is once the client does WritesDone
     func streamingFromClient(context: UnaryResponseCallContext<Grpc_Testing_SimpleResponse>) -> EventLoopFuture<(StreamEvent<Grpc_Testing_SimpleRequest>) -> Void> {
         context.logger.warning("streamingFromClient not implemented yet")
         return context.eventLoop.makeFailedFuture(GRPCStatus(code: GRPCStatus.Code.unimplemented,
                                                              message: "Not implemented"))
     }
 
+    /// Single-sided unbounded streaming from server to client
+    /// The server repeatedly returns the client payload as-is
     func streamingFromServer(request: Grpc_Testing_SimpleRequest,
                              context: StreamingResponseCallContext<Grpc_Testing_SimpleResponse>) -> EventLoopFuture<GRPCStatus> {
         context.logger.warning("streamingFromServer not implemented yet")
@@ -52,26 +58,16 @@ final class AsyncQpsServerImpl: Grpc_Testing_BenchmarkServiceProvider {
                                                              message: "Not implemented"))
     }
 
+    /// Two-sided unbounded streaming between server to client
+    /// Both sides send the content of their own choice to the other
     func streamingBothWays(context: StreamingResponseCallContext<Grpc_Testing_SimpleResponse>) -> EventLoopFuture<(StreamEvent<Grpc_Testing_SimpleRequest>) -> Void> {
         context.logger.warning("streamingBothWays not implemented yet")
         return context.eventLoop.makeFailedFuture(GRPCStatus(code: GRPCStatus.Code.unimplemented,
                                                              message: "Not implemented"))
     }
 
- /*   static Status ProcessSimpleRPC(request : Grpc_Testing_SimpleRequest) -> Grpc_Testing_SimpleResponse throws {
-        if request.responseSize > 0 {
-            request.responseType
-            request.responseSize
-        /*if (!Server::SetPayload(request->response_type(), request->response_size(),
-                                response->mutable_payload())) {
-          return Status(grpc::StatusCode::INTERNAL, "Error creating payload.");
-        }*/
-            var response = Grpc_Testing_SimpleResponse()
-            response.payload =
-      }
-    } */
-
-    static func makePayload(type: Grpc_Testing_PayloadType, size: Int) throws -> Grpc_Testing_Payload {
+    /// Make a payload for sending back to the client.
+    private static func makePayload(type: Grpc_Testing_PayloadType, size: Int) throws -> Grpc_Testing_Payload {
         if type != .compressable {
             throw GRPCStatus(code: .internalError, message: "Failed to make payload")
         }
@@ -81,86 +77,15 @@ final class AsyncQpsServerImpl: Grpc_Testing_BenchmarkServiceProvider {
         return payload
     }
 
-    static func processSimpleRPC(request: Grpc_Testing_SimpleRequest) throws -> Grpc_Testing_SimpleResponse {
+    /// Process a simple RPC.
+    /// - parameters:
+    ///     - request: The request from the client.
+    /// - returns: A response to send back to the client.
+    private static func processSimpleRPC(request: Grpc_Testing_SimpleRequest) throws -> Grpc_Testing_SimpleResponse {
         var response = Grpc_Testing_SimpleResponse()
-        // TODO: Double check nothing else needs filing out.
         if request.responseSize > 0 {
             response.payload = try makePayload(type: request.responseType, size: Int(request.responseSize))
         }
         return response
     }
-
 }
-
-
-/* class ServerRpcContextUnaryImpl final : public ServerRpcContext {
- public:
-  ServerRpcContextUnaryImpl(
-      std::function<void(ServerContextType*, RequestType*,
-                         grpc::ServerAsyncResponseWriter<ResponseType>*,
-                         void*)>
-          request_method,
-      std::function<grpc::Status(RequestType*, ResponseType*)> invoke_method)
-      : srv_ctx_(new ServerContextType),
-        next_state_(&ServerRpcContextUnaryImpl::invoker),
-        request_method_(request_method),
-        invoke_method_(invoke_method),
-        response_writer_(srv_ctx_.get()) {
-    request_method_(srv_ctx_.get(), &req_, &response_writer_,
-                    AsyncQpsServerTest::tag(this));
-  }
-  ~ServerRpcContextUnaryImpl() override {}
-  bool RunNextState(bool ok) override { return (this->*next_state_)(ok); }
-  void Reset() override {
-    srv_ctx_.reset(new ServerContextType);
-    req_ = RequestType();
-    response_writer_ =
-        grpc::ServerAsyncResponseWriter<ResponseType>(srv_ctx_.get());
-
-    // Then request the method
-    next_state_ = &ServerRpcContextUnaryImpl::invoker;
-    request_method_(srv_ctx_.get(), &req_, &response_writer_,
-                    AsyncQpsServerTest::tag(this));
-  }
-
- private:
-  bool finisher(bool) { return false; }
-  bool invoker(bool ok) {
-    if (!ok) {
-      return false;
-    }
-
-    // Call the RPC processing function
-    grpc::Status status = invoke_method_(&req_, &response_);
-
-    // Have the response writer work and invoke on_finish when done
-    next_state_ = &ServerRpcContextUnaryImpl::finisher;
-    response_writer_.Finish(response_, status, AsyncQpsServerTest::tag(this));
-    return true;
-  }
-  std::unique_ptr<ServerContextType> srv_ctx_;
-  RequestType req_;
-  ResponseType response_;
-  bool (ServerRpcContextUnaryImpl::*next_state_)(bool);
-  std::function<void(ServerContextType*, RequestType*,
-                     grpc::ServerAsyncResponseWriter<ResponseType>*, void*)>
-      request_method_;
-  std::function<grpc::Status(RequestType*, ResponseType*)> invoke_method_;
-  grpc::ServerAsyncResponseWriter<ResponseType> response_writer_;
-};*/
-
-/*
- static Status ProcessSimpleRPC(const PayloadConfig&, SimpleRequest* request,
-                                SimpleResponse* response) {
-   if (request->response_size() > 0) {
-     if (!Server::SetPayload(request->response_type(), request->response_size(),
-                             response->mutable_payload())) {
-       return Status(grpc::StatusCode::INTERNAL, "Error creating payload.");
-     }
-   }
-   // We are done using the request. Clear it to reduce working memory.
-   // This proves to reduce cache misses in large message size cases.
-   request->Clear();
-   return Status::OK;
- }
- */

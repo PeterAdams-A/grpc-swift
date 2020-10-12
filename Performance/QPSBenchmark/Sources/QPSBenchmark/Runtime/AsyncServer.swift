@@ -19,25 +19,29 @@ import GRPC
 import Logging
 import Foundation
 
-
-
+/// Server setup for asynchronous requests.
 final class AsyncQpsServer: QpsServer {
-    let eventLoopGroup: MultiThreadedEventLoopGroup
-    let server: EventLoopFuture<Server>
-    let threads: Int
+    private let eventLoopGroup: MultiThreadedEventLoopGroup
+    private let server: EventLoopFuture<Server>
+    private let threadCount: Int
 
-    var statsPeriodStart: Date
-    var cpuStatsPeriodStart: CPUTime
+    private var statsPeriodStart: Date
+    private var cpuStatsPeriodStart: CPUTime
 
-    var logger = Logger(label: "AsyncQpsServer")
+    private let logger = Logger(label: "AsyncQpsServer")
 
-    init(config: Grpc_Testing_ServerConfig) {
-        // logger.logLevel = .debug
-        let threads = config.asyncServerThreads > 0 ? Int(config.asyncServerThreads) : System.coreCount
-        self.logger.info("Sizing AsyncQpsServer", metadata: ["threads": "\(threads)"])
-        self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threads)
-        self.threads = threads
+    /// Initialisation.
+    /// - parameters:
+    ///     - config: Description of the type of server required.
+    ///     - whenBound: Called when the server has successful bound to a port.
+    init(config: Grpc_Testing_ServerConfig, whenBound: @escaping (ServerInfo) -> Void) {
+        // Setup threads as requested.
+        let threadCount = config.asyncServerThreads > 0 ? Int(config.asyncServerThreads) : System.coreCount
+        self.threadCount = threadCount
+        self.logger.info("Sizing AsyncQpsServer", metadata: ["threads": "\(threadCount)"])
+        self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threadCount)
 
+        // Start stats gathering.
         self.statsPeriodStart = grpcTimeNow()
         self.cpuStatsPeriodStart = getResourceUsage()
 
@@ -48,9 +52,17 @@ final class AsyncQpsServer: QpsServer {
             .withServiceProviders([workerService])
             .withLogger(self.logger)
             .bind(host: "localhost", port: Int(config.port))
+
+        self.server.whenSuccess { server in
+            let port = server.channel.localAddress?.port ?? 0
+            whenBound(ServerInfo(threadCount: threadCount, port: port))
+        }
     }
 
-    // See Server::Mark
+    /// Send the status of the current test
+    /// - parameters:
+    ///     - reset: Indicates if the stats collection should be reset after publication or not.
+    ///     - context: Context to describe where to send the status to.
     func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ServerStatus>) {
         let currentTime = grpcTimeNow()
         let currentResourceUsage = getResourceUsage()
@@ -61,7 +73,6 @@ final class AsyncQpsServer: QpsServer {
         result.stats.totalCpuTime = 0
         result.stats.idleCpuTime = 0
         result.stats.cqPollCount = 0
-        // TODO:  Core stats
         self.logger.info("Sending response")
         _ = context.sendResponse(result)
         if reset {
@@ -70,6 +81,10 @@ final class AsyncQpsServer: QpsServer {
         }
     }
 
+    /// Shutdown the service.
+    /// - parameters:
+    ///     - callbackLoop: Which eventloop should be called back on completion.
+    /// - returns: A future on the `callbackLoop` which will succeed on completion of shutdown.
     func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void> {
         let promise: EventLoopPromise<Void> = callbackLoop.makePromise()
 
@@ -86,21 +101,4 @@ final class AsyncQpsServer: QpsServer {
         }
         return promise.futureResult
     }
-}
-
-func createAsyncServer(config : Grpc_Testing_ServerConfig) -> AsyncQpsServer {
-    /*
-     return std::unique_ptr<Server>(
-           new AsyncQpsServerTest<SimpleRequest, SimpleResponse,
-                                  BenchmarkService::AsyncService,
-                                  grpc::ServerContext>(
-               config, RegisterBenchmarkService,
-               &BenchmarkService::AsyncService::RequestUnaryCall,
-               &BenchmarkService::AsyncService::RequestStreamingCall,
-               &BenchmarkService::AsyncService::RequestStreamingFromClient,
-               &BenchmarkService::AsyncService::RequestStreamingFromServer,
-               &BenchmarkService::AsyncService::RequestStreamingBothWays,
-               ProcessSimpleRPC));
-     */
-    return AsyncQpsServer(config: config)
 }

@@ -17,23 +17,29 @@
 import NIO
 import GRPC
 
-struct ServerInfo {
-    var cores: Int
-    var port: Int
-}
-
+// Implementation of the control service for communication with the driver process.
 class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
-    let finishedPromise: EventLoopPromise<Void>
-    let serverPortOverride: Int?
+    private let finishedPromise: EventLoopPromise<Void>
+    private let serverPortOverride: Int?
 
-    var runningServer: QpsServer? = nil
-    var runningClient: QpsClient? = nil
+    private var runningServer: QpsServer? = nil
+    private var runningClient: QpsClient? = nil
 
+    /// Initialise.
+    /// - parameters:
+    ///     - finishedPromise:  Promise to complete when the server has finished running.
+    ///     - serverPortOverride: An override to port number requested by the driver process.
     init(finishedPromise: EventLoopPromise<Void>, serverPortOverride: Int?) {
         self.finishedPromise = finishedPromise
         self.serverPortOverride = serverPortOverride
     }
 
+    /// Start server with specified workload.
+    /// First request sent specifies the ServerConfig followed by ServerStatus
+    /// response. After that, a "Mark" can be sent anytime to request the latest
+    /// stats. Closing the stream will initiate shutdown of the test server
+    /// and once the shutdown has finished, the OK status is sent to terminate
+    /// this RPC.
     func runServer(context: StreamingResponseCallContext<Grpc_Testing_ServerStatus>) -> EventLoopFuture<(StreamEvent<Grpc_Testing_ServerArgs>) -> Void> {
         context.logger.info("runServer stream started.")
         return context.eventLoop.makeSucceededFuture({ event in
@@ -52,7 +58,6 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                         self.runServerBody(context: context, serverConfig: serverConfig)
 
                     case .mark(let mark):
-                        // TODO:  Capture stats
                         context.logger.info("server mark requested")
                         guard let runningServer = self.runningServer else {
                             context.logger.error("server not running")
@@ -81,6 +86,12 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
         })
     }
 
+    /// Start client with specified workload.
+    /// First request sent specifies the ClientConfig followed by ClientStatus
+    /// response. After that, a "Mark" can be sent anytime to request the latest
+    /// stats. Closing the stream will initiate shutdown of the test client
+    /// and once the shutdown has finished, the OK status is sent to terminate
+    /// this RPC.
     func runClient(context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>) -> EventLoopFuture<(StreamEvent<Grpc_Testing_ClientArgs>) -> Void> {
         context.logger.info("runClient stream started")
         return context.eventLoop.makeSucceededFuture( { event in
@@ -128,12 +139,14 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
         })
     }
 
+    /// Just return the core count - unary call
     func coreCount(request: Grpc_Testing_CoreRequest, context: StatusOnlyCallContext) -> EventLoopFuture<Grpc_Testing_CoreResponse> {
         context.logger.notice("coreCount queried")
         let cores = Grpc_Testing_CoreResponse.with { $0.cores = Int32(System.coreCount) }
         return context.eventLoop.makeSucceededFuture(cores)
     }
 
+    /// Quit this worker
     func quitWorker(request: Grpc_Testing_Void, context: StatusOnlyCallContext) -> EventLoopFuture<Grpc_Testing_Void> {
         context.logger.warning("quitWorker called")
         self.finishedPromise.succeed(())
@@ -141,6 +154,19 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
     }
 
     // MARK: Create Server
+    private func runServerBody(context: StreamingResponseCallContext<Grpc_Testing_ServerStatus>,
+                               serverConfig: Grpc_Testing_ServerConfig) {
+        var serverConfig = serverConfig
+        self.serverPortOverride.map { serverConfig.port = Int32($0) }
+
+        do {
+            self.runningServer = try WorkerServiceImpl.createServer(context: context, config: serverConfig)
+        }
+        catch {
+            context.statusPromise.fail(error)
+        }
+    }
+
     private static func createServer(context: StreamingResponseCallContext<Grpc_Testing_ServerStatus>,
                                      config : Grpc_Testing_ServerConfig) throws -> QpsServer {
         context.logger.info("Starting server", metadata: ["type": .stringConvertible(config.serverType)])
@@ -149,17 +175,13 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
         case .syncServer:
             throw GRPCStatus(code: .unimplemented, message: "Server Type not implemented")
         case .asyncServer:
-            let asyncServer = createAsyncServer(config: config)
-            asyncServer.server.whenSuccess { server in
-                let port = server.channel.localAddress?.port ?? 0
-                let threads = asyncServer.threads
-
-                var response = Grpc_Testing_ServerStatus()
-                response.cores = Int32(threads)
-                response.port = Int32(port)
-
-                _ = context.sendResponse(response)
-            }
+            let asyncServer = AsyncQpsServer(config: config,
+                                             whenBound: { serverInfo in
+                                                var response = Grpc_Testing_ServerStatus()
+                                                response.cores = Int32(serverInfo.threadCount)
+                                                response.port = Int32(serverInfo.port)
+                                                _ = context.sendResponse(response)
+                                             })
             return asyncServer
         case .asyncGenericServer:
             throw GRPCStatus(code: .unimplemented, message: "Server Type not implemented")
@@ -169,22 +191,6 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
             throw GRPCStatus(code: .unimplemented, message: "Server Type not implemented")
         case .UNRECOGNIZED(_):
             throw GRPCStatus(code: .invalidArgument, message: "Unrecognised server type")
-        }
-    }
-
-    private func runServerBody(context: StreamingResponseCallContext<Grpc_Testing_ServerStatus>,
-                               serverConfig: Grpc_Testing_ServerConfig) {
-        // TODO
-        var serverConfig = serverConfig
-        self.serverPortOverride.map { serverConfig.port = Int32($0) }
-
-        context.logger.info("RunServerBody: about to create server")
-
-        do {
-            self.runningServer = try WorkerServiceImpl.createServer(context: context, config: serverConfig)
-        }
-        catch {
-            context.statusPromise.fail(error)
         }
     }
 
