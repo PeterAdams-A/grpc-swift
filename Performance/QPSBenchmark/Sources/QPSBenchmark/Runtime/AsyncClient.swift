@@ -18,92 +18,45 @@ import NIO
 import GRPC
 import Logging
 import Foundation
-import NIOConcurrencyHelpers
 import BenchmarkUtils
 
-// Note:   ClientImpl contains more logic in C++.
+final class AsyncUnaryQpsClient: QpsClient {
+    private let eventLoopGroup: MultiThreadedEventLoopGroup
+    private let threadCount: Int
 
-// TODO: config.median_latency_collection_interval_millis
+    private let logger = Logger(label: "AsyncQpsClient")
 
-class AsyncQpsClient {
-    let eventLoopGroup: MultiThreadedEventLoopGroup
-    let threads: Int
+    private let channelRepeaters: [ChannelRepeater]
 
-    let logger = Logger(label: "AsyncQpsClient")
+    private var statsPeriodStart: Date
+    private var cpuStatsPeriodStart: CPUTime
 
-    init(threads: Int, eventLoopGroup: MultiThreadedEventLoopGroup) {
-        self.threads = threads
-        self.logger.info("Sizing AsyncQpsClient", metadata: ["threads": "\(threads)"])
-        self.eventLoopGroup = eventLoopGroup
-    }
+    /// Initialise a client to send unary requests.
+    /// - parameters:
+    ///      - config: Config from the driver specifying how the client should behave.
+    init(config: Grpc_Testing_ClientConfig) throws {
+        // Parse possible invalid targets before code with side effects.
+        let serverTargets = try config.parsedServerTargets()
 
-    static func threadsToUse(config: Grpc_Testing_ClientConfig) -> Int {
-        return config.asyncClientThreads > 0 ? Int(config.asyncClientThreads) : System.coreCount
-    }
-}
+        // Setup threads
+        let threadCount = config.threadsToUse()
+        self.threadCount = threadCount
+        self.logger.info("Sizing AsyncQpsClient", metadata: ["threads": "\(threadCount)"])
+        self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threadCount)
 
-
-
-struct Stats {
-    var latencies = Histogram()
-    var statuses = StatusCounts()
-}
-
-// Stats with access controlled by a lock -
-// I tried implemented with event loop hopping but the driver refuses to wait shutting
-// the connection immediately after the request.
-struct StatsWithLock {
-    private var data = Stats()
-    private let lock = Lock()
-
-    mutating func add(latency: Double) {
-        self.lock.withLock { self.data.latencies.add(value: latency) }
-    }
-
-    mutating func copyData(reset: Bool) -> Stats {
-        return self.lock.withLock {
-            let result = self.data
-            if reset {
-                self.data = Stats()
-            }
-            return result
-        }
-    }
-}
-
-// Setup threads.
-// tee workers onto each.
-// use client impl to send
-// do again when done.
-// need a way of stopping
-// need to look at the histogram stuff.
-
-
-final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
-    let channelRepeaters: [ChannelRepeater]
-
-    var statsPeriodStart: Date
-    var cpuStatsPeriodStart: CPUTime
-
-
-    init(config: Grpc_Testing_ClientConfig) {
-        let threads = AsyncQpsClient.threadsToUse(config: config)
-        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threads)
-        let serverTargets = try! AsyncUnaryQpsClient.parseServerTargets(serverTargets: config.serverTargets)
-
+        // Start recording stats.
         self.statsPeriodStart = grpcTimeNow()
         self.cpuStatsPeriodStart = getResourceUsage()
 
+        // Start the requested number of channels.
         precondition(serverTargets.count > 0)
-        var channelRepeaters: [ChannelRepeater] = []
+        var channelRepeaters : [ChannelRepeater] = []
         for channelNumber in 0..<Int(config.clientChannels) {
             channelRepeaters.append(ChannelRepeater(target: serverTargets[channelNumber % serverTargets.count],
                                                     config: config,
-                                                    elg: eventLoopGroup))
+                                                    eventLoopGroup: eventLoopGroup))
         }
         self.channelRepeaters = channelRepeaters
-
-        super.init(threads: threads, eventLoopGroup: eventLoopGroup)
 
         // Start the train.
         for channelRepeater in self.channelRepeaters {
@@ -111,7 +64,10 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         }
     }
 
-    // TODO:  See Client::Mark
+    /// Send current status back to the driver process.
+    /// - parameters:
+    ///     - reset: Should the stats reset after being sent.
+    ///     - context: Calling context to allow results to be sent back to the driver.
     func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>) {
         let currentTime = grpcTimeNow()
         let currentResourceUsage = getResourceUsage()
@@ -121,6 +77,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         result.stats.timeUser = currentResourceUsage.userTime - self.cpuStatsPeriodStart.userTime
         result.stats.cqPollCount = 0
 
+        // Collect stats from each of the channels.
         var latencyHistogram = Histogram()
         var statusCounts = StatusCounts()
         for channelRepeater in self.channelRepeaters {
@@ -139,6 +96,10 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         }
     }
 
+    /// Shutdown the service.
+    /// - parameters:
+    ///     - callbackLoop: Which eventloop should be called back on completion.
+    /// - returns: A future on the `callbackLoop` which will succeed on completion of shutdown.
     func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void> {
         let promise: EventLoopPromise<Void> = callbackLoop.makePromise()
         let stoppedFutures = self.channelRepeaters.map { repeater in repeater.stop() }
@@ -157,32 +118,13 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         return promise.futureResult
     }
 
-    struct HostAndPort {
-        var host: String
-        var port: Int
-    }
-
-    struct ServerTargetParseError: Error {}
-
-    private static func parseServerTargets(serverTargets: [String]) throws -> [HostAndPort] {
-        try serverTargets.map { target in
-            if let splitIndex = target.lastIndex(of: ":") {
-                let host = target[..<splitIndex]
-                let portString = target[(target.index(after: splitIndex))...]
-                if let port = Int(portString) {
-                    return HostAndPort(host: String(host), port: port)
-                }
-            }
-            throw ServerTargetParseError()
-        }
-    }
-
-    class ChannelRepeater {
-        let connection: ClientConnection
-        let client: Grpc_Testing_BenchmarkServiceClient
-        let payloadConfig: Grpc_Testing_PayloadConfig
-        let logger = Logger(label: "ChannelRepeater")
-        let maxPermittedOutstandingRequests: Int
+    /// Class to manage a channel.  Repeatedly makes requests on that channel and records what happens.
+    private class ChannelRepeater {
+        private let connection: ClientConnection
+        private let client: Grpc_Testing_BenchmarkServiceClient
+        private let payloadConfig: Grpc_Testing_PayloadConfig
+        private let logger = Logger(label: "ChannelRepeater")
+        private let maxPermittedOutstandingRequests: Int
         
         private var stats: StatsWithLock
 
@@ -192,8 +134,8 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
 
         init(target: HostAndPort,
              config : Grpc_Testing_ClientConfig,
-             elg: EventLoopGroup) {
-            self.connection = ClientConnection.insecure(group: elg)
+             eventLoopGroup: EventLoopGroup) {
+            self.connection = ClientConnection.insecure(group: eventLoopGroup)
                 .connect(host: target.host, port: target.port)
             self.client = Grpc_Testing_BenchmarkServiceClient(channel: connection)
             self.payloadConfig = config.payloadConfig
@@ -202,36 +144,39 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
             self.stats = StatsWithLock()
         }
 
+        /// Launch as many requests as allowed on the channel.
         private func launchRequests() throws {
+            precondition(self.connection.eventLoop.inEventLoop)
             while !self.stopRequested && self.numberOfOutstandingRequests < self.maxPermittedOutstandingRequests {
                 try makeRequestAndRepeat()
             }
         }
 
+        /// If there is spare permitted capacity make a request and repeat when it is done.
         private func makeRequestAndRepeat() throws {
+            // Check for capacity.
             if self.stopRequested || self.numberOfOutstandingRequests >= self.maxPermittedOutstandingRequests {
                 return
             }
-            let start = grpcTimeNow()
+            let startTime = grpcTimeNow()
             let request = try ChannelRepeater.createClientRequest(payloadConfig: self.payloadConfig)
             self.numberOfOutstandingRequests += 1
             let result = client.unaryCall(request)
-            // TODO:  I think C++ allows a pool of outstanding requests here.
-            // TODO:  Set function to run on finished.
-            // For now just keep going forever.
-            // TODO:  Should probably trigger below regardless of result.
-            // TODO:  Does current implementation alloc?
+
+            // Wait for the request to complete.
             _ = result.status.map { status in
                 self.numberOfOutstandingRequests -= 1
                 if status.isOk {
-                    let end = grpcTimeNow()
-                    self.recordLatency(end.timeIntervalSince(start))
-                    try! self.makeRequestAndRepeat()
+                    let endTime = grpcTimeNow()
+                    self.recordLatency(endTime.timeIntervalSince(startTime))
                 } else {
                     self.logger.error("Bad status from unary request", metadata: ["status": "\(status)"])
                 }
                 if self.stopRequested && self.numberOfOutstandingRequests == 0 {
                     self.stopIsComplete()
+                } else {
+                    // Try scheduling another request.
+                    try! self.launchRequests()
                 }
             }
         }
@@ -240,11 +185,15 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
             self.stats.add(latency: latency * 1e9)
         }
 
+        /// Get stats for sending to the driver.
+        /// - parameters:
+        ///     - reset: Should the stats reset after copying.
+        /// - returns: The statistics for this channel.
         func getStats(reset: Bool) -> Stats {
             return self.stats.copyData(reset: reset)
         }
 
-        static func createClientRequest(payloadConfig: Grpc_Testing_PayloadConfig) throws -> Grpc_Testing_SimpleRequest {
+        private static func createClientRequest(payloadConfig: Grpc_Testing_PayloadConfig) throws -> Grpc_Testing_SimpleRequest {
             if let payload = payloadConfig.payload {
                 switch payload {
                 case .bytebufParams(_):
@@ -271,8 +220,15 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
             }
         }
 
+        /// Start sending requests to the server.
         func start() {
-            try! self.launchRequests()
+            if self.connection.eventLoop.inEventLoop {
+                try! self.launchRequests()
+            } else {
+                self.connection.eventLoop.execute {
+                    try! self.launchRequests()
+                }
+            }
         }
 
         private func stopIsComplete() {
@@ -282,6 +238,8 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
             self.connection.close().cascade(to: self.stopComplete)
         }
 
+        /// Stop sending requests to the server.
+        /// - returns: An future which can be waited on to signal when all activity has ceased.
         func stop() -> EventLoopFuture<Void> {
             self.connection.eventLoop.execute {
                 self.stopRequested = true
@@ -294,10 +252,14 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
     }
 }
 
+/// Create an asynchronous client of the requested type.
+/// - parameters:
+///     - config: Description of the client required.
+/// - returns: The client created.
 func createAsyncClient(config : Grpc_Testing_ClientConfig) throws -> QpsClient {
     switch config.rpcType {    
     case .unary:
-        return AsyncUnaryQpsClient(config: config)
+        return try! AsyncUnaryQpsClient(config: config)
     case .streaming:
         throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
     case .streamingFromClient:
