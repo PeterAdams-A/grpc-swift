@@ -134,7 +134,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         result.stats.latencies = Grpc_Testing_HistogramData(from: latencyHistogram)
         result.stats.requestResults = statusCounts.toRequestResultCounts()
         self.logger.info("Sending response")
-        context.sendResponse(result)
+        _ = context.sendResponse(result)
 
         if reset {
             self.statsPeriodStart = currentTime
@@ -148,7 +148,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
         let allStopped = EventLoopFuture<Void>.reduce((),
                                                       stoppedFutures,
                                                       on: callbackLoop, { (_, _) -> Void in return () } )
-        allStopped.always { result in
+        _ = allStopped.always { result in
             return self.eventLoopGroup.shutdownGracefully { error in
                 if let error = error {
                     promise.fail(error)
@@ -224,7 +224,7 @@ final class AsyncUnaryQpsClient: AsyncQpsClient, QpsClient {
             // For now just keep going forever.
             // TODO:  Should probably trigger below regardless of result.
             // TODO:  Does current implementation alloc?
-            result.status.map { status in
+            _ = result.status.map { status in
                 self.numberOfOutstandingRequests -= 1
                 if status.isOk {
                     let end = grpcTimeNow()

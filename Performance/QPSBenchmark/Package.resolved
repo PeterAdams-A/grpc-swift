@@ -86,9 +86,9 @@
         "package": "swift-service-lifecycle",
         "repositoryURL": "https://github.com/swift-server/swift-service-lifecycle.git",
         "state": {
-          "branch": "main",
+          "branch": null,
           "revision": "3a02d48c9521c26b2695374a7d90527df8ad5f80",
-          "version": null
+          "version": "1.0.0-alpha.5"
         }
       }
     ]

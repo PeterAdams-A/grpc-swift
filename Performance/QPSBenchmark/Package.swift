@@ -14,13 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import PackageDescription
 
 import PackageDescription
 
 let package = Package(
   name: "QPSBenchmark",
- products: [
+  products: [
     .executable(name: "QPSBenchmark", targets: ["QPSBenchmark"]),
   ],
 
@@ -29,7 +28,7 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.22.0"),
     .package(url: "https://github.com/apple/swift-log.git", from: "1.4.0"),
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "0.3.0"),
-    .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", .branch("main")),
+    .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "1.0.0-alpha"),
   ],
   targets: [
     .target(name: "QPSBenchmark", dependencies: [
@@ -38,6 +37,10 @@ let package = Package(
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
             "Logging",
             "Lifecycle",
-        ])
+        ]),
+    .testTarget(name: "QPSBenchmarkTests", dependencies: [
+            "GRPC",
+            "QPSBenchmark",
+        ]),
   ]
 )

@@ -67,7 +67,7 @@ final class AsyncQpsServer: QpsServer {
         result.stats.cqPollCount = 0
         // TODO:  Core stats
         self.logger.info("Sending response")
-        context.sendResponse(result)
+        _ = context.sendResponse(result)
         if reset {
             self.statsPeriodStart = currentTime
             self.cpuStatsPeriodStart = currentResourceUsage
@@ -77,7 +77,7 @@ final class AsyncQpsServer: QpsServer {
     func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void> {
         let promise: EventLoopPromise<Void> = callbackLoop.makePromise()
 
-        self.server.map {
+        _ = self.server.map {
             server in server.close()
         }.always { result in
             return self.eventLoopGroup.shutdownGracefully { error in

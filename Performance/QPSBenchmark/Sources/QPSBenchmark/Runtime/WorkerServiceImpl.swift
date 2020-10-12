@@ -81,10 +81,6 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
         })
     }
 
-
-
-    
-
     func runClient(context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>) -> EventLoopFuture<(StreamEvent<Grpc_Testing_ClientArgs>) -> Void> {
         context.logger.info("runClient stream started")
         return context.eventLoop.makeSucceededFuture( { event in
@@ -100,10 +96,9 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                                                                   message: "Client worker busy"))
                             return
                         }
-                        // TODO:  Scoped the next within profile.
                         self.runClientBody(context: context, clientConfig: clientConfig)
                         // Initial status is the default (in C++)
-                        context.sendResponse(Grpc_Testing_ClientStatus())
+                        _ = context.sendResponse(Grpc_Testing_ClientStatus())
                     case .mark(let mark):
                         // Capture stats
                         context.logger.info("client mark requested")
@@ -163,7 +158,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                 response.cores = Int32(threads)
                 response.port = Int32(port)
 
-                context.sendResponse(response)
+                _ = context.sendResponse(response)
             }
             return asyncServer
         case .asyncGenericServer:

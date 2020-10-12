@@ -20,6 +20,9 @@ import GRPC
 struct StatusCounts {
     private var counts: [Int: Int64] = [:]
 
+    /// Add one to the count of this sort of status code.
+    /// - parameters:
+    ///     - status: The code to count.
     mutating func add(status: GRPCStatus.Code) {
         // Only record failures
         if status != .ok {
@@ -31,6 +34,9 @@ struct StatusCounts {
         }
     }
 
+    /// Merge another set of counts into this one.
+    /// - parameters:
+    ///     - source: The other set of counts to merge into this.
     mutating func merge(source: StatusCounts) {
         for sourceCount in source.counts {
             if let existingCount = self.counts[sourceCount.key] {
@@ -43,6 +49,8 @@ struct StatusCounts {
 }
 
 extension StatusCounts {
+    /// Convert status count to a protobuf for sending to the driver process.
+    /// - returns: The protobuf message for sending.
     func toRequestResultCounts() -> [Grpc_Testing_RequestResultCount] {
         return counts.map { (key, value) -> Grpc_Testing_RequestResultCount in
             var grpc = Grpc_Testing_RequestResultCount()
