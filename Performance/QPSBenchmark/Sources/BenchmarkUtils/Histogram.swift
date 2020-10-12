@@ -14,29 +14,27 @@
  * limitations under the License.
  */
 
-import Logging
 import Foundation
 
 struct HistorgramShapeMismatch: Error {
-
 }
 
 /// Histograms are stored with exponentially increasing bucket sizes.
 /// The first bucket is [0, `multiplier`) where `multiplier` = 1 + resolution
 /// Bucket n (n>=1) contains [`multiplier`**n, `multiplier`**(n+1))
 /// There are sufficient buckets to reach max_bucket_start
-struct Histogram {
-    var sum: Double
-    var sumOfSquares: Double
-    var countOfValuesSeen: Double
-    var multiplier: Double
-    var oneOnLogMultiplier: Double
-    var minSeen: Double
-    var maxSeen: Double
-    var maxPossible: Double
-    var buckets: [UInt32]
+public struct Histogram {
+    public private(set) var sum: Double
+    public private(set) var sumOfSquares: Double
+    public private(set) var countOfValuesSeen: Double
+    public private(set) var multiplier: Double
+    public private(set) var oneOnLogMultiplier: Double
+    public private(set) var minSeen: Double
+    public private(set) var maxSeen: Double
+    public private(set) var maxPossible: Double
+    public private(set) var buckets: [UInt32]
 
-    init(resolution: Double = 0.01, maxBucketStart: Double = 60e9) {
+    public init(resolution: Double = 0.01, maxBucketStart: Double = 60e9) {
         precondition(resolution > 0.0)
         precondition(maxBucketStart > resolution)
         self.sum = 0.0
@@ -59,7 +57,7 @@ struct Histogram {
         return Int(log(value) * oneOnLogMultiplier)
     }
 
-    func bucketFor(value: Double) -> Int {
+    private func bucketFor(value: Double) -> Int {
         let bucket = Histogram.bucketForUnchecked(value: Histogram.clamp(value: value,
                                                                          minAllowed: 0,
                                                                          maxAllowed: self.maxPossible),
@@ -69,11 +67,11 @@ struct Histogram {
         return bucket
     }
 
-    static func clamp(value: Double, minAllowed: Double, maxAllowed: Double) -> Double {
+    private static func clamp(value: Double, minAllowed: Double, maxAllowed: Double) -> Double {
         return min(maxAllowed, max(minAllowed, value))
     }
 
-    mutating func add(value: Double) {
+    public mutating func add(value: Double) {
         self.sum += value
         self.sumOfSquares += value * value
         self.countOfValuesSeen += 1
@@ -86,7 +84,7 @@ struct Histogram {
         self.buckets[self.bucketFor(value: value)] += 1
     }
 
-    mutating func merge(source: Histogram) throws {
+    public mutating func merge(source: Histogram) throws {
         guard (self.buckets.count == source.buckets.count) || (self.multiplier == source.multiplier) else {
             // Fail because these histograms don't match.
             throw HistorgramShapeMismatch()
@@ -104,16 +102,5 @@ struct Histogram {
         for bucket in 0..<self.buckets.count {
             self.buckets[bucket] += source.buckets[bucket]
         }
-    }
-}
-
-extension Grpc_Testing_HistogramData {
-    init(from: Histogram) {
-        self.bucket = from.buckets
-        self.minSeen = from.minSeen
-        self.maxSeen = from.maxSeen
-        self.sum = from.sum
-        self.sumOfSquares = from.sumOfSquares
-        self.count = from.countOfValuesSeen
     }
 }

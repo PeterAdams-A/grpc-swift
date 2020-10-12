@@ -19,6 +19,7 @@ import GRPC
 import Logging
 import Foundation
 import NIOConcurrencyHelpers
+import BenchmarkUtils
 
 // Note:   ClientImpl contains more logic in C++.
 

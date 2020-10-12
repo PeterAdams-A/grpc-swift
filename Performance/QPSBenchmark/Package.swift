@@ -29,18 +29,24 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-log.git", from: "1.4.0"),
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "0.3.0"),
     .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "1.0.0-alpha"),
+    .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.9.0"),
   ],
   targets: [
     .target(name: "QPSBenchmark", dependencies: [
-            "GRPC",
-            "NIO",
-            .product(name: "ArgumentParser", package: "swift-argument-parser"),
-            "Logging",
-            "Lifecycle",
-        ]),
-    .testTarget(name: "QPSBenchmarkTests", dependencies: [
-            "GRPC",
-            "QPSBenchmark",
-        ]),
+        "GRPC",
+        "NIO",
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        "Logging",
+        "Lifecycle",
+        "SwiftProtobuf",
+        "BenchmarkUtils",
+    ]),
+    .target(name: "BenchmarkUtils", dependencies: [
+        "GRPC",
+    ]),
+    .testTarget(name: "BenchmarkUtilsTests", dependencies: [
+        "GRPC",
+        "BenchmarkUtils",
+    ]),
   ]
 )
