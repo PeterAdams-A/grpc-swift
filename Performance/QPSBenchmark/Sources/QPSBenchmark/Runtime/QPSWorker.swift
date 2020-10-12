@@ -18,23 +18,30 @@ import NIO
 import GRPC
 import Logging
 
+/// Sets up and runs a worker service which listens for instructions on what tests to run.
+/// Currently doesn't understand TLS.
 class QPSWorker {
-    var driverPort: Int
-    var serverPort: Int?
-    //var credentialType: String
+    private var driverPort: Int
+    private var serverPort: Int?
 
-    init(driverPort: Int, serverPort: Int?) { // credentialType: String) {
+    /// Initialise.
+    /// - parameters:
+    ///     - driverPort: Port to listen for instructions on.
+    ///     - serverPort: Possible override for the port the testing will actually occur on - usually supplied by the driver process.
+    init(driverPort: Int, serverPort: Int?) {
         self.driverPort = driverPort
         self.serverPort = serverPort
-        //self.credentialType = credentialType
     }
 
-    let logger = Logger(label: "QPSWorker")
+    private let logger = Logger(label: "QPSWorker")
 
-    var eventLoopGroup: MultiThreadedEventLoopGroup?
-    var server: EventLoopFuture<Server>?
-    var workEndFuture: EventLoopFuture<Void>? = nil
+    private var eventLoopGroup: MultiThreadedEventLoopGroup?
+    private var server: EventLoopFuture<Server>?
+    private var workEndFuture: EventLoopFuture<Void>? = nil
 
+    /// Start up the server which listens for instructions from the driver.
+    /// - parameters:
+    ///     - onQuit: Function to call when the driver has indicated that the server should exit.
     func start(onQuit: @escaping () -> ()) {
         precondition(self.eventLoopGroup == nil)
         self.logger.info("Starting")
@@ -53,29 +60,11 @@ class QPSWorker {
             .bind(host: "localhost", port: self.driverPort)
     }
 
+    /// Shutdown waiting for completion.
     func syncShutdown() throws {
         precondition(self.eventLoopGroup != nil)
         self.logger.info("Stopping")
         try self.eventLoopGroup?.syncShutdownGracefully()
         self.logger.info("Stopped")
     }
-
-   /* func wait() throws {
-        precondition(self.server != nil)
-        precondition(self.workEndFuture != nil)
-        self.server?.whenComplete { result in
-            switch result {
-            case .failure(let error):
-                self.logger.error("Server Failed \(error)")
-                return
-            case .success(_):
-                self.logger.info("Server running")
-            }
-        }
-        try self.workEndFuture?.wait()
-    }
-
-    func Done() {
-        
-    }*/
 }

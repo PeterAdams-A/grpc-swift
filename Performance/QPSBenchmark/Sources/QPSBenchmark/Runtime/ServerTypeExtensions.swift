@@ -15,6 +15,7 @@
  */
 
 extension Grpc_Testing_ServerType: CustomStringConvertible {
+    /// Text descriptions for the server types.
     public var description: String {
         switch self {
         case .syncServer:

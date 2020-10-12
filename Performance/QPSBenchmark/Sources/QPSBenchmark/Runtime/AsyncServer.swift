@@ -19,11 +19,7 @@ import GRPC
 import Logging
 import Foundation
 
-protocol QpsServer {
-    func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ServerStatus>)
 
-    func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void>
-}
 
 final class AsyncQpsServer: QpsServer {
     let eventLoopGroup: MultiThreadedEventLoopGroup

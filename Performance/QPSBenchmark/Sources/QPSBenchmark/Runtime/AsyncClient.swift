@@ -42,11 +42,7 @@ class AsyncQpsClient {
     }
 }
 
-protocol QpsClient {
-    func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>)
 
-    func shutdown(callbackLoop: EventLoop) -> EventLoopFuture<Void>
-}
 
 struct Stats {
     var latencies = Histogram()

@@ -18,6 +18,9 @@ import Foundation
 import BenchmarkUtils
 
 extension Grpc_Testing_HistogramData {
+    /// Construct a RPC histogram suitable for sending.
+    /// - parameters:
+    ///     - from: The internal histogram representation.
     init(from: Histogram) {
         self.init()
         self.bucket = from.buckets

@@ -16,6 +16,8 @@
 
 import Foundation
 
+/// Get the current time.
+/// - returns: The current time.
 func grpcTimeNow() -> Date {
     return Date()
 }

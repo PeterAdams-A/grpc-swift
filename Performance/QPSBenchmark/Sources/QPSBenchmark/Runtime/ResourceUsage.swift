@@ -30,11 +30,16 @@ extension TimeInterval {
     }
 }
 
+/// Holder for CPU time consumed.
 struct CPUTime {
+    /// Amount of user process time consumed.
     var userTime: TimeInterval
+    /// Amount of system time consumed.
     var systemTime: TimeInterval
 }
 
+/// Get resource usage for this process.
+/// - returns: The amount of CPU resource consumed.
 func getResourceUsage() -> CPUTime {
     var usage = rusage()
     if getrusage(RUSAGE_SELF, &usage) == 0 {

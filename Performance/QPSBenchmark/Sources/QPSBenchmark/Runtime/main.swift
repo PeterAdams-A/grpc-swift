@@ -18,14 +18,8 @@ import ArgumentParser
 import Logging
 import Lifecycle
 
+/// Main entry point to the QPS worker application.
 final class QPSWorkerApp: ParsableCommand {
-    /*
-     DEFINE_int32(driver_port, 0, "Port for communication with driver");
-     DEFINE_int32(server_port, 0, "Port for operation as a server");
-     DEFINE_string(credential_type, grpc::testing::kInsecureCredentialsType,
-                   "Credential type for communication with driver");
-     */
-
     @Option(name: .customLong("driver_port"), help: "Port for communication with driver.")
     var driverPort: Int
 
@@ -35,44 +29,26 @@ final class QPSWorkerApp: ParsableCommand {
     @Option(name: .customLong("credential_type"), help: "Credential type for communication with driver.")
     var credentialType: String = "boo"  // TODO:  Default to kInsecureCredentialsType
 
+    /// Run the application and wait for completion to be signalled.
     func run() throws {
         let logger = Logger(label: "QPSWorker")
         logger.info("Starting...")
-        /*
-         gpr_log(GPR_DEBUG,
-                 "test slowdown factor: sanitizer=%" PRId64 ", fixture=%" PRId64
-                 ", poller=%" PRId64 ", total=%" PRId64,
-                 grpc_test_sanitizer_slowdown_factor(), g_fixture_slowdown_factor,
-                 g_poller_slowdown_factor, grpc_test_slowdown_factor());
-         */
 
         logger.info("Initializing the lifecycle container")
         // This installs backtrace.
         let lifecycle = ServiceLifecycle()
 
-
-
-
-
-
-        // TODO:  Seed rng
-        /*
-         /* seed rng with pid, so we don't end up with the same random numbers as a
-            concurrently running test binary */
-         srand(seed());
-         */
-
         let qpsWorker = QPSWorker(driverPort: self.driverPort,
                                   serverPort: self.serverPort)
                                  // credentialType: self.credentialType)
         qpsWorker.start(onQuit: { () in lifecycle.shutdown() })
-        // TODO:  Investigate eventloop future compatibility mode.
+
         lifecycle.registerShutdown(label: "QPSWorker", .sync {
             () in try qpsWorker.syncShutdown()
         })
 
         lifecycle.start { error in
-            // start completion handler.
+            // Start completion handler.
             // if a startup error occurred you can capture it here
             if let error = error {
                 logger.error("failed starting \(self) ☠️: \(error)")
@@ -82,36 +58,9 @@ final class QPSWorkerApp: ParsableCommand {
         }
 
         lifecycle.wait()
-        // Wait on the server's `onClose` future to stop the program from exiting.
-        // _ = try qpsWorker.server?.flatMap {
-           //  $0.onClose
-        // }.wait()
-
-        // Termination from internally.
-        // try qpsWorker.wait()
 
         logger.info("Worker has finished.")
     }
 }
 
 QPSWorkerApp.main()
-
-
-
-
-/*
- void grpc_test_init(int /*argc*/, char** /*argv*/) {
-   install_crash_handler();
-
-
- }
- */
-
-/*
- QpsWorker worker(FLAGS_driver_port, FLAGS_server_port, FLAGS_credential_type);
-
-   while (!got_sigint && !worker.Done()) {
-     gpr_sleep_until(gpr_time_add(gpr_now(GPR_CLOCK_REALTIME),
-                                  gpr_time_from_seconds(5, GPR_TIMESPAN)));
-   }
- */

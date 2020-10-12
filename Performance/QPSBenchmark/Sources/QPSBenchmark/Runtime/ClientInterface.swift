@@ -17,13 +17,13 @@
 import NIO
 import GRPC
 
-/// Interface server types must implement.
-protocol QpsServer {
+/// Protocol which clients must implement.
+protocol QpsClient {
     /// Send the status of the current test
     /// - parameters:
     ///     - reset: Indicates if the stats collection should be reset after publication or not.
     ///     - context: Context to describe where to send the status to.
-    func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ServerStatus>)
+    func sendStatus(reset: Bool, context: StreamingResponseCallContext<Grpc_Testing_ClientStatus>)
 
     /// Shutdown the service.
     /// - parameters:
