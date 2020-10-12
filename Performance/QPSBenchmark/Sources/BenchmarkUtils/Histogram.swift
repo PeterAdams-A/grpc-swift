@@ -34,6 +34,10 @@ public struct Histogram {
     private var maxPossible: Double
     public private(set) var buckets: [UInt32]
 
+    /// Initialise a histogram.
+    /// - parameters:
+    ///     - resolution: Defines the with of the buckets - see the description of this structure.
+    ///     - maxBucketStart: Defines the start of the greatest valued bucket.
     public init(resolution: Double = 0.01, maxBucketStart: Double = 60e9) {
         precondition(resolution > 0.0)
         precondition(maxBucketStart > resolution)
@@ -71,6 +75,9 @@ public struct Histogram {
         return min(maxAllowed, max(minAllowed, value))
     }
 
+    /// Add a value to this histogram, updating buckets and stats
+    /// - parameters:
+    ///     - value: The value to add.
     public mutating func add(value: Double) {
         self.sum += value
         self.sumOfSquares += value * value
@@ -84,6 +91,9 @@ public struct Histogram {
         self.buckets[self.bucketFor(value: value)] += 1
     }
 
+    /// Merge two histograms together updating `self`
+    /// - parameters:
+    ///    - source: the other histogram to merge into this.
     public mutating func merge(source: Histogram) throws {
         guard (self.buckets.count == source.buckets.count) || (self.multiplier == source.multiplier) else {
             // Fail because these histograms don't match.
