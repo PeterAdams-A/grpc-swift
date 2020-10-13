@@ -27,7 +27,7 @@ final class QPSWorkerApp: ParsableCommand {
     var serverPort: Int?
 
     @Option(name: .customLong("credential_type"), help: "Credential type for communication with driver.")
-    var credentialType: String = "boo"  // TODO:  Default to kInsecureCredentialsType
+    var credentialType: String = "todo"  // TODO:  Default to kInsecureCredentialsType
 
     /// Run the application and wait for completion to be signalled.
     func run() throws {

@@ -124,7 +124,7 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                 }
             case .end:
                 context.logger.info("runClient ended")
-                // TODO:  Shutdown
+                // Shutdown
                 if let runningClient = self.runningClient {
                     self.runningClient = nil
                     let shutdownFuture = runningClient.shutdown(callbackLoop: context.eventLoop)
@@ -224,8 +224,6 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                 // If there are no parameters assume simple.
                 return try createAsyncClient(config: clientConfig)
             }
-            // TODO:  else what?
-            // This is defaulted in C++
             throw GRPCStatus(code: .unimplemented, message: "Client without payload config")
         case .otherClient:
             throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
