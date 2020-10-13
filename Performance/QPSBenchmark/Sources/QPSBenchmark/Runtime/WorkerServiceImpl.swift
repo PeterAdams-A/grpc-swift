@@ -220,6 +220,9 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                 case .complexParams(_):
                     return try createAsyncClient(config: clientConfig)
                 }
+            } else {
+                // If there are no parameters assume simple.
+                return try createAsyncClient(config: clientConfig)
             }
             // TODO:  else what?
             // This is defaulted in C++
