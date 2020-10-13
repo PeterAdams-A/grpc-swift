@@ -56,7 +56,6 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                             return
                         }
                         self.runServerBody(context: context, serverConfig: serverConfig)
-
                     case .mark(let mark):
                         context.logger.info("server mark requested")
                         guard let runningServer = self.runningServer else {
@@ -66,10 +65,8 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                             return
                         }
                         runningServer.sendStatus(reset: mark.reset, context: context)
-                        
                     }
                 }
-
             case .end:
                 context.logger.info("runServer stream ended.")
                 if let runningServer = self.runningServer {
@@ -131,7 +128,6 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                     shutdownFuture.map { () in
                         return GRPCStatus(code: .ok, message: nil)
                     }.cascade(to: context.statusPromise)
-
                 } else {
                     context.statusPromise.succeed(.ok)
                 }
@@ -224,7 +220,6 @@ class WorkerServiceImpl: Grpc_Testing_WorkerServiceProvider {
                 // If there are no parameters assume simple.
                 return try createAsyncClient(config: clientConfig)
             }
-            throw GRPCStatus(code: .unimplemented, message: "Client without payload config")
         case .otherClient:
             throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
         case .callbackClient:

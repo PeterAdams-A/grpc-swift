@@ -3,12 +3,10 @@
 An implementation of the QPS worker for benchmarking described in the  
 [gRPC benchmarking guide](https://grpc.io/docs/guides/benchmarking/)
 
-
 ## Building
 To rebuild the proto files run `make generate-qps-worker`.
 
 The benchmarks can be built in the usual SPM way but release mode is strongly recommended - `swift build -c release`
-
 
 ## Running the benchmarks
 

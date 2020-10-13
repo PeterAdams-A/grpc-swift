@@ -20,6 +20,7 @@ import Logging
 import Foundation
 import BenchmarkUtils
 
+/// Client to make a series of asynchronous unary calls.
 final class AsyncUnaryQpsClient: QpsClient {
     private let eventLoopGroup: MultiThreadedEventLoopGroup
     private let threadCount: Int
@@ -239,7 +240,7 @@ final class AsyncUnaryQpsClient: QpsClient {
         }
 
         /// Stop sending requests to the server.
-        /// - returns: An future which can be waited on to signal when all activity has ceased.
+        /// - returns: A future which can be waited on to signal when all activity has ceased.
         func stop() -> EventLoopFuture<Void> {
             self.connection.eventLoop.execute {
                 self.stopRequested = true
@@ -259,7 +260,7 @@ final class AsyncUnaryQpsClient: QpsClient {
 func createAsyncClient(config : Grpc_Testing_ClientConfig) throws -> QpsClient {
     switch config.rpcType {    
     case .unary:
-        return try! AsyncUnaryQpsClient(config: config)
+        return try AsyncUnaryQpsClient(config: config)
     case .streaming:
         throw GRPCStatus(code: .unimplemented, message: "Client Type not implemented")
     case .streamingFromClient:

@@ -53,7 +53,7 @@ class QPSWorker {
         let workerService = WorkerServiceImpl(finishedPromise: workEndPromise, serverPortOverride: self.serverPort)
 
         // Start the server.
-        self.logger.info("Binding to localhost:\(self.driverPort)")
+        self.logger.info("Binding to localhost", metadata: ["driverPort": "\(self.driverPort)"])
         self.server = Server.insecure(group: eventLoopGroup)
           .withServiceProviders([workerService])
             .withLogger(Logger(label: "GRPC"))
