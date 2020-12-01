@@ -76,7 +76,7 @@ public class ClientConnection {
 
   /// HTTP multiplexer from the `channel` handling gRPC calls.
   internal var multiplexer: EventLoopFuture<HTTP2StreamMultiplexer> {
-    return self.connectionManager.getHTTP2Mux()
+    return self.connectionManager.getHTTP2Multiplexer()
   }
 
   /// The configuration for this client.
@@ -455,13 +455,13 @@ extension Channel {
         targetWindowSize: httpTargetWindowSize,
         inboundStreamInitializer: nil
       )
-    }.flatMap { _ in
+    }.flatMap { h2multiplexer in
       self.pipeline.handler(type: NIOHTTP2Handler.self).flatMap { http2Handler in
         self.pipeline.addHandlers(
           [
             GRPCClientKeepaliveHandler(configuration: connectionKeepalive),
             GRPCIdleHandler(
-              mode: .client(connectionManager),
+              mode: .client(connectionManager, h2multiplexer),
               logger: logger,
               idleTimeout: connectionIdleTimeout
             ),
