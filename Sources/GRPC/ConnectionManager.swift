@@ -17,10 +17,10 @@ import Foundation
 import Logging
 import NIO
 import NIOConcurrencyHelpers
+import NIOHTTP2
 
 internal class ConnectionManager {
   internal struct IdleState {
-    var configuration: ClientConnection.Configuration
   }
 
   internal enum Reconnect {
@@ -29,7 +29,6 @@ internal class ConnectionManager {
   }
 
   internal struct ConnectingState {
-    var configuration: ClientConnection.Configuration
     var backoffIterator: ConnectionBackoffIterator?
     var reconnect: Reconnect
 
@@ -38,7 +37,6 @@ internal class ConnectionManager {
   }
 
   internal struct ConnectedState {
-    var configuration: ClientConnection.Configuration
     var backoffIterator: ConnectionBackoffIterator?
     var reconnect: Reconnect
 
@@ -47,7 +45,6 @@ internal class ConnectionManager {
     var error: Error?
 
     init(from state: ConnectingState, candidate: Channel) {
-      self.configuration = state.configuration
       self.backoffIterator = state.backoffIterator
       self.reconnect = state.reconnect
       self.readyChannelPromise = state.readyChannelPromise
@@ -56,25 +53,21 @@ internal class ConnectionManager {
   }
 
   internal struct ReadyState {
-    var configuration: ClientConnection.Configuration
     var channel: Channel
     var error: Error?
 
     init(from state: ConnectedState) {
-      self.configuration = state.configuration
       self.channel = state.candidate
     }
   }
 
   internal struct TransientFailureState {
-    var configuration: ClientConnection.Configuration
     var backoffIterator: ConnectionBackoffIterator?
     var readyChannelPromise: EventLoopPromise<Channel>
     var scheduled: Scheduled<Void>
     var reason: Error?
 
     init(from state: ConnectingState, scheduled: Scheduled<Void>, reason: Error) {
-      self.configuration = state.configuration
       self.backoffIterator = state.backoffIterator
       self.readyChannelPromise = state.readyChannelPromise
       self.scheduled = scheduled
@@ -82,16 +75,14 @@ internal class ConnectionManager {
     }
 
     init(from state: ConnectedState, scheduled: Scheduled<Void>) {
-      self.configuration = state.configuration
       self.backoffIterator = state.backoffIterator
       self.readyChannelPromise = state.readyChannelPromise
       self.scheduled = scheduled
       self.reason = state.error
     }
 
-    init(from state: ReadyState, scheduled: Scheduled<Void>) {
-      self.configuration = state.configuration
-      self.backoffIterator = state.configuration.connectionBackoff?.makeIterator()
+    init(from state: ReadyState, scheduled: Scheduled<Void>, backoffIterator: ConnectionBackoffIterator?) {
+      self.backoffIterator = backoffIterator
       self.readyChannelPromise = state.channel.eventLoop.makePromise()
       self.scheduled = scheduled
       self.reason = state.error
@@ -210,6 +201,7 @@ internal class ConnectionManager {
   internal let eventLoop: EventLoop
   internal let monitor: ConnectivityStateMonitor
   internal var logger: Logger
+  private let configuration: ClientConnection.Configuration
 
   private let connectionID: String
   private var channelNumber: UInt64
@@ -269,11 +261,12 @@ internal class ConnectionManager {
 
     let eventLoop = configuration.eventLoopGroup.next()
     self.eventLoop = eventLoop
-    self.state = .idle(IdleState(configuration: configuration))
+    self.state = .idle(IdleState())
     self.monitor = ConnectivityStateMonitor(
       delegate: configuration.connectivityStateDelegate,
       queue: configuration.connectivityStateDelegateQueue
     )
+    self.configuration = configuration
 
     self.channelProvider = channelProvider
 
@@ -281,6 +274,21 @@ internal class ConnectionManager {
     self.channelNumber = channelNumber
     self.logger = logger
   }
+
+    internal func getHTTP2Mux() -> EventLoopFuture<HTTP2StreamMultiplexer> {
+        return self.getChannelSwitched().flatMap {
+          $0.pipeline.handler(type: HTTP2StreamMultiplexer.self)
+        }
+    }
+    
+    private func getChannelSwitched() -> EventLoopFuture<Channel> {
+        switch self.configuration.callStartBehavior.wrapped {
+      case .waitsForConnectivity:
+        return self.getChannel()
+      case .fastFailure:
+        return self.getOptimisticChannel()
+      }
+    }
 
   /// Returns a future for a connected channel.
   internal func getChannel() -> EventLoopFuture<Channel> {
@@ -545,7 +553,7 @@ internal class ConnectionManager {
     // the channel?
     case let .ready(ready):
       // No, no backoff is configured.
-      if ready.configuration.connectionBackoff == nil {
+      if self.configuration.connectionBackoff == nil {
         self.logger.debug("shutting down connection, no reconnect configured/remaining")
         self.state = .shutdown(
           ShutdownState(
@@ -562,7 +570,10 @@ internal class ConnectionManager {
           self.startConnecting()
         }
         self.logger.debug("scheduling connection attempt", metadata: ["delay": "0"])
-        self.state = .transientFailure(TransientFailureState(from: ready, scheduled: scheduled))
+        let backoffIterator = self.configuration.connectionBackoff?.makeIterator()
+        self.state = .transientFailure(TransientFailureState(from: ready,
+                                                             scheduled: scheduled,
+                                                             backoffIterator: backoffIterator))
       }
 
     // This is fine: we expect the channel to become inactive after becoming idle.
@@ -628,12 +639,12 @@ internal class ConnectionManager {
     switch self.state {
     case let .active(state):
       // This state is reachable if the keepalive timer fires before we reach the ready state.
-      self.state = .idle(IdleState(configuration: state.configuration))
+      self.state = .idle(IdleState())
       state.readyChannelPromise
         .fail(GRPCStatus(code: .unavailable, message: "Idled before reaching ready state"))
 
-    case let .ready(state):
-      self.state = .idle(IdleState(configuration: state.configuration))
+    case .ready:
+      self.state = .idle(IdleState())
 
     case .shutdown:
       // This is expected when the connection is closed by the user: when the channel becomes
@@ -714,17 +725,15 @@ extension ConnectionManager {
   // states. Must be called on the `EventLoop`.
   private func startConnecting() {
     switch self.state {
-    case let .idle(state):
-      let iterator = state.configuration.connectionBackoff?.makeIterator()
+    case .idle:
+      let iterator = self.configuration.connectionBackoff?.makeIterator()
       self.startConnecting(
-        configuration: state.configuration,
         backoffIterator: iterator,
         channelPromise: self.eventLoop.makePromise()
       )
 
     case let .transientFailure(pending):
       self.startConnecting(
-        configuration: pending.configuration,
         backoffIterator: pending.backoffIterator,
         channelPromise: pending.readyChannelPromise
       )
@@ -748,7 +757,6 @@ extension ConnectionManager {
   }
 
   private func startConnecting(
-    configuration: ClientConnection.Configuration,
     backoffIterator: ConnectionBackoffIterator?,
     channelPromise: EventLoopPromise<Channel>
   ) {
@@ -760,7 +768,7 @@ extension ConnectionManager {
 
     let candidate: EventLoopFuture<Channel> = self.eventLoop.flatSubmit {
       let channel = self.makeChannel(
-        configuration: configuration,
+        configuration: self.configuration,
         connectTimeout: timeoutAndBackoff?.timeout
       )
       channel.whenFailure { error in
@@ -772,7 +780,6 @@ extension ConnectionManager {
     // Should we reconnect if the candidate channel fails?
     let reconnect: Reconnect = timeoutAndBackoff.map { .after($0.backoff) } ?? .none
     let connecting = ConnectingState(
-      configuration: configuration,
       backoffIterator: backoffIterator,
       reconnect: reconnect,
       readyChannelPromise: channelPromise,

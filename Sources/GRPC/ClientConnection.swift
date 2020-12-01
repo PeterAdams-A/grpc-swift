@@ -74,21 +74,9 @@ import SwiftProtobuf
 public class ClientConnection {
   private let connectionManager: ConnectionManager
 
-  private func getChannel() -> EventLoopFuture<Channel> {
-    switch self.configuration.callStartBehavior.wrapped {
-    case .waitsForConnectivity:
-      return self.connectionManager.getChannel()
-
-    case .fastFailure:
-      return self.connectionManager.getOptimisticChannel()
-    }
-  }
-
   /// HTTP multiplexer from the `channel` handling gRPC calls.
   internal var multiplexer: EventLoopFuture<HTTP2StreamMultiplexer> {
-    return self.getChannel().flatMap {
-      $0.pipeline.handler(type: HTTP2StreamMultiplexer.self)
-    }
+    return self.connectionManager.getHTTP2Mux()
   }
 
   /// The configuration for this client.
