@@ -32,7 +32,6 @@ internal class ConnectionManager {
     var backoffIterator: ConnectionBackoffIterator?
     var reconnect: Reconnect
 
-    var readyChannelPromise: EventLoopPromise<Channel>
     var candidate: EventLoopFuture<Channel>
     var readyChannelMuxPromise: EventLoopPromise<HTTP2StreamMultiplexer>
   }
@@ -40,8 +39,6 @@ internal class ConnectionManager {
   internal struct ConnectedState {
     var backoffIterator: ConnectionBackoffIterator?
     var reconnect: Reconnect
-
-    var readyChannelPromise: EventLoopPromise<Channel>
     var candidate: Channel
     var readyChannelMuxPromise: EventLoopPromise<HTTP2StreamMultiplexer>
     var multiplexer: HTTP2StreamMultiplexer
@@ -50,7 +47,6 @@ internal class ConnectionManager {
     init(from state: ConnectingState, candidate: Channel, multiplexer: HTTP2StreamMultiplexer) {
       self.backoffIterator = state.backoffIterator
       self.reconnect = state.reconnect
-      self.readyChannelPromise = state.readyChannelPromise
       self.candidate = candidate
         self.readyChannelMuxPromise = state.readyChannelMuxPromise
         self.multiplexer = multiplexer
@@ -70,14 +66,12 @@ internal class ConnectionManager {
 
   internal struct TransientFailureState {
     var backoffIterator: ConnectionBackoffIterator?
-    var readyChannelPromise: EventLoopPromise<Channel>
     var readyChannelMuxPromise: EventLoopPromise<HTTP2StreamMultiplexer>
     var scheduled: Scheduled<Void>
     var reason: Error?
 
     init(from state: ConnectingState, scheduled: Scheduled<Void>, reason: Error) {
       self.backoffIterator = state.backoffIterator
-      self.readyChannelPromise = state.readyChannelPromise
         self.readyChannelMuxPromise = state.readyChannelMuxPromise
       self.scheduled = scheduled
       self.reason = reason
@@ -85,7 +79,6 @@ internal class ConnectionManager {
 
     init(from state: ConnectedState, scheduled: Scheduled<Void>) {
       self.backoffIterator = state.backoffIterator
-      self.readyChannelPromise = state.readyChannelPromise
         self.readyChannelMuxPromise = state.readyChannelMuxPromise
       self.scheduled = scheduled
       self.reason = state.error
@@ -93,7 +86,6 @@ internal class ConnectionManager {
 
     init(from state: ReadyState, scheduled: Scheduled<Void>, backoffIterator: ConnectionBackoffIterator?) {
       self.backoffIterator = backoffIterator
-      self.readyChannelPromise = state.channel.eventLoop.makePromise()
         self.readyChannelMuxPromise = state.channel.eventLoop.makePromise()
       self.scheduled = scheduled
       self.reason = state.error
@@ -418,9 +410,9 @@ internal class ConnectionManager {
         shutdown = .shutdownByUser(closeFuture: self.eventLoop.makeSucceededFuture(()))
         self.state = .shutdown(shutdown)
 
-        // Fail the ready channel promise: we're shutting down so even if we manage to successfully
+        // Fail the ready channel mux promise: we're shutting down so even if we manage to successfully
         // connect the application shouldn't should have access to the channel.
-        state.readyChannelPromise.fail(GRPCStatus(code: .unavailable, message: nil))
+        state.readyChannelMuxPromise.fail(GRPCStatus(code: .unavailable, message: nil))
         // In case we do successfully connect, close immediately.
         state.candidate.whenSuccess {
           $0.close(mode: .all, promise: nil)
@@ -432,9 +424,9 @@ internal class ConnectionManager {
         shutdown = .shutdownByUser(closeFuture: self.eventLoop.makeSucceededFuture(()))
         self.state = .shutdown(shutdown)
 
-        // Fail the ready channel promise: we're shutting down so even if we manage to successfully
+        // Fail the ready channel mux promise: we're shutting down so even if we manage to successfully
         // connect the application shouldn't should have access to the channel.
-        state.readyChannelPromise.fail(GRPCStatus(code: .unavailable, message: nil))
+        state.readyChannelMuxPromise.fail(GRPCStatus(code: .unavailable, message: nil))
         // We have a channel, close it.
         state.candidate.close(mode: .all, promise: nil)
 
@@ -458,9 +450,9 @@ internal class ConnectionManager {
         // `startConnecting()` will see our new `shutdown` state and ignore the request to connect.
         state.scheduled.cancel()
 
-        // Fail the ready channel promise: we're shutting down so even if we manage to successfully
+        // Fail the ready channel mux promise: we're shutting down so even if we manage to successfully
         // connect the application shouldn't should have access to the channel.
-        state.readyChannelPromise.fail(shutdown.reason)
+        state.readyChannelMuxPromise.fail(shutdown.reason)
 
       // We're already shutdown; nothing to do.
       case let .shutdown(state):
@@ -561,7 +553,7 @@ internal class ConnectionManager {
         )
 
         self.state = .shutdown(shutdownState)
-        active.readyChannelPromise.fail(error)
+        active.readyChannelMuxPromise.fail(error)
 
       // Yes, after some time.
       case let .after(delay):
@@ -629,7 +621,6 @@ internal class ConnectionManager {
     switch self.state {
     case let .active(connected):
       self.state = .ready(ReadyState(from: connected))
-      connected.readyChannelPromise.succeed(connected.candidate)
       connected.readyChannelMuxPromise.succeed(connected.multiplexer)
 
     case .shutdown:
@@ -664,7 +655,7 @@ internal class ConnectionManager {
     case let .active(state):
       // This state is reachable if the keepalive timer fires before we reach the ready state.
       self.state = .idle(IdleState())
-      state.readyChannelPromise
+      state.readyChannelMuxPromise
         .fail(GRPCStatus(code: .unavailable, message: "Idled before reaching ready state"))
 
     case .ready:
@@ -706,7 +697,7 @@ extension ConnectionManager {
         self.state = .shutdown(
           ShutdownState(closeFuture: self.eventLoop.makeSucceededFuture(()), reason: error)
         )
-        connecting.readyChannelPromise.fail(error)
+        connecting.readyChannelMuxPromise.fail(error)
 
       // Yes, after a delay.
       case let .after(delay):
@@ -753,14 +744,12 @@ extension ConnectionManager {
       let iterator = self.configuration.connectionBackoff?.makeIterator()
       self.startConnecting(
         backoffIterator: iterator,
-        channelPromise: self.eventLoop.makePromise(),
         muxPromise: self.eventLoop.makePromise()
       )
 
     case let .transientFailure(pending):
       self.startConnecting(
         backoffIterator: pending.backoffIterator,
-        channelPromise: pending.readyChannelPromise,
         muxPromise: pending.readyChannelMuxPromise
       )
 
@@ -784,7 +773,6 @@ extension ConnectionManager {
 
   private func startConnecting(
     backoffIterator: ConnectionBackoffIterator?,
-    channelPromise: EventLoopPromise<Channel>,
     muxPromise: EventLoopPromise<HTTP2StreamMultiplexer>
   ) {
     let timeoutAndBackoff = backoffIterator?.next()
@@ -809,7 +797,6 @@ extension ConnectionManager {
     let connecting = ConnectingState(
       backoffIterator: backoffIterator,
       reconnect: reconnect,
-      readyChannelPromise: channelPromise,
       candidate: candidate,
       readyChannelMuxPromise: muxPromise
     )
