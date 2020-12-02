@@ -136,7 +136,7 @@ internal class GRPCIdleHandler: ChannelInboundHandler {
     // The client should become active: we'll only schedule the idling when the channel
     // becomes 'ready'.
     case let (.client(manager, multiplexer), .notReady):
-        manager.channelActive(channel: context.channel, multiplexer: multiplexer)
+      manager.channelActive(channel: context.channel, multiplexer: multiplexer)
 
     case (.server, .notReady),
          (_, .ready),

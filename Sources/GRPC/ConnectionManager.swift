@@ -20,8 +20,7 @@ import NIOConcurrencyHelpers
 import NIOHTTP2
 
 internal class ConnectionManager {
-  internal struct IdleState {
-  }
+  internal struct IdleState {}
 
   internal enum Reconnect {
     case none
@@ -48,8 +47,8 @@ internal class ConnectionManager {
       self.backoffIterator = state.backoffIterator
       self.reconnect = state.reconnect
       self.candidate = candidate
-        self.readyChannelMuxPromise = state.readyChannelMuxPromise
-        self.multiplexer = multiplexer
+      self.readyChannelMuxPromise = state.readyChannelMuxPromise
+      self.multiplexer = multiplexer
     }
   }
 
@@ -60,7 +59,7 @@ internal class ConnectionManager {
 
     init(from state: ConnectedState) {
       self.channel = state.candidate
-        self.multiplexer = state.multiplexer
+      self.multiplexer = state.multiplexer
     }
   }
 
@@ -72,21 +71,25 @@ internal class ConnectionManager {
 
     init(from state: ConnectingState, scheduled: Scheduled<Void>, reason: Error) {
       self.backoffIterator = state.backoffIterator
-        self.readyChannelMuxPromise = state.readyChannelMuxPromise
+      self.readyChannelMuxPromise = state.readyChannelMuxPromise
       self.scheduled = scheduled
       self.reason = reason
     }
 
     init(from state: ConnectedState, scheduled: Scheduled<Void>) {
       self.backoffIterator = state.backoffIterator
-        self.readyChannelMuxPromise = state.readyChannelMuxPromise
+      self.readyChannelMuxPromise = state.readyChannelMuxPromise
       self.scheduled = scheduled
       self.reason = state.error
     }
 
-    init(from state: ReadyState, scheduled: Scheduled<Void>, backoffIterator: ConnectionBackoffIterator?) {
+    init(
+      from state: ReadyState,
+      scheduled: Scheduled<Void>,
+      backoffIterator: ConnectionBackoffIterator?
+    ) {
       self.backoffIterator = backoffIterator
-        self.readyChannelMuxPromise = state.channel.eventLoop.makePromise()
+      self.readyChannelMuxPromise = state.channel.eventLoop.makePromise()
       self.scheduled = scheduled
       self.reason = state.error
     }
@@ -278,120 +281,120 @@ internal class ConnectionManager {
     self.logger = logger
   }
 
-    /// Get the multiplexer from the underlying channel handling gRPC calls.
-    /// if the `ConnectionManager` was configured to be `fastFailure` this will have
-    /// one chance to connect - if not reconnections are managed here.
-    internal func getHTTP2Multiplexer() -> EventLoopFuture<HTTP2StreamMultiplexer> {
-        switch self.configuration.callStartBehavior.wrapped {
-      case .waitsForConnectivity:
-        return self.getHTTP2MultiplexerPatient()
-      case .fastFailure:
-        return self.getHTTP2MultiplexerOptimistic()
+  /// Get the multiplexer from the underlying channel handling gRPC calls.
+  /// if the `ConnectionManager` was configured to be `fastFailure` this will have
+  /// one chance to connect - if not reconnections are managed here.
+  internal func getHTTP2Multiplexer() -> EventLoopFuture<HTTP2StreamMultiplexer> {
+    switch self.configuration.callStartBehavior.wrapped {
+    case .waitsForConnectivity:
+      return self.getHTTP2MultiplexerPatient()
+    case .fastFailure:
+      return self.getHTTP2MultiplexerOptimistic()
+    }
+  }
+
+  /// Returns a future for the multiplexer which succeeded when the channel is connected.
+  /// Reconnects are handled if necessary.
+  private func getHTTP2MultiplexerPatient() -> EventLoopFuture<HTTP2StreamMultiplexer> {
+    let multiplexer: EventLoopFuture<HTTP2StreamMultiplexer>
+
+    switch self.state {
+    case .idle:
+      self.startConnecting()
+      // We started connecting so we must transition to the `connecting` state.
+      guard case let .connecting(connecting) = self.state else {
+        self.invalidState()
+      }
+      multiplexer = connecting.readyChannelMuxPromise.futureResult
+
+    case let .connecting(state):
+      multiplexer = state.readyChannelMuxPromise.futureResult
+
+    case let .active(state):
+      multiplexer = state.readyChannelMuxPromise.futureResult
+
+    case let .ready(state):
+      multiplexer = state.channel.eventLoop.makeSucceededFuture(state.multiplexer)
+
+    case let .transientFailure(state):
+      multiplexer = state.readyChannelMuxPromise.futureResult
+
+    case let .shutdown(state):
+      multiplexer = self.eventLoop.makeFailedFuture(state.reason)
+    }
+
+    self.logger.debug("vending multiplexer future", metadata: [
+      "connectivity_state": "\(self.state.label)",
+    ])
+
+    return multiplexer
+  }
+
+  /// Returns a future for the current channel multiplexer, or future channel multiplexer from the current connection
+  /// attempt, or if the state is 'idle' returns the future for the next connection attempt.
+  ///
+  /// Note: if the state is 'transientFailure' or 'shutdown' then a failed future will be returned.
+  private func getHTTP2MultiplexerOptimistic() -> EventLoopFuture<HTTP2StreamMultiplexer> {
+    func fulfillMuxPromiseGivenState(promise: EventLoopPromise<HTTP2StreamMultiplexer>) {
+      switch self.state {
+      case .idle:
+        // Unexpected to get here.
+        self.invalidState()
+      case .connecting:
+        // Unexpected to get here.
+        self.invalidState()
+      case let .active(state):
+        promise.succeed(state.multiplexer)
+      case let .ready(state):
+        promise.succeed(state.multiplexer)
+      case let .transientFailure(state):
+        // Provide the reason we failed transiently, if we can.
+        let error = state.reason ?? GRPCStatus(
+          code: .unavailable,
+          message: "Connection multiplexer requested while backing off"
+        )
+        promise.fail(error)
+      case let .shutdown(state):
+        promise.fail(state.reason)
       }
     }
 
-    /// Returns a future for the multiplexer which succeeded when the channel is connected.
-    /// Reconnects are handled if necessary.
-    private func getHTTP2MultiplexerPatient() -> EventLoopFuture<HTTP2StreamMultiplexer> {
-        let multiplexer: EventLoopFuture<HTTP2StreamMultiplexer>
+    return self.eventLoop.flatSubmit {
+      let muxPromise: EventLoopPromise<HTTP2StreamMultiplexer> = self.eventLoop.makePromise()
 
-        switch self.state {
-        case .idle:
-          self.startConnecting()
-          // We started connecting so we must transition to the `connecting` state.
-          guard case let .connecting(connecting) = self.state else {
-            self.invalidState()
-          }
-          multiplexer = connecting.readyChannelMuxPromise.futureResult
-
-        case let .connecting(state):
-          multiplexer = state.readyChannelMuxPromise.futureResult
-
-        case let .active(state):
-          multiplexer = state.readyChannelMuxPromise.futureResult
-
-        case let .ready(state):
-          multiplexer = state.channel.eventLoop.makeSucceededFuture(state.multiplexer)
-
-        case let .transientFailure(state):
-          multiplexer = state.readyChannelMuxPromise.futureResult
-
-        case let .shutdown(state):
-          multiplexer = self.eventLoop.makeFailedFuture(state.reason)
+      switch self.state {
+      case .idle:
+        self.startConnecting()
+        // We started connecting so we must transition to the `connecting` state.
+        guard case let .connecting(connecting) = self.state else {
+          self.invalidState()
         }
+        connecting.candidate
+          .whenComplete { _ in fulfillMuxPromiseGivenState(promise: muxPromise) }
 
-        self.logger.debug("vending multiplexer future", metadata: [
-          "connectivity_state": "\(self.state.label)",
-        ])
+      case let .connecting(state):
+        state.candidate.whenComplete { _ in fulfillMuxPromiseGivenState(promise: muxPromise) }
 
-        return multiplexer
-    }
+      case .active:
+        fulfillMuxPromiseGivenState(promise: muxPromise)
 
-    /// Returns a future for the current channel multiplexer, or future channel multiplexer from the current connection
-    /// attempt, or if the state is 'idle' returns the future for the next connection attempt.
-    ///
-    /// Note: if the state is 'transientFailure' or 'shutdown' then a failed future will be returned.
-    private func getHTTP2MultiplexerOptimistic() -> EventLoopFuture<HTTP2StreamMultiplexer> {
-        func fulfillMuxPromiseGivenState(promise: EventLoopPromise<HTTP2StreamMultiplexer>) {
-            switch self.state {
-            case .idle:
-                // Unexpected to get here.
-                self.invalidState()
-            case .connecting(_):
-                // Unexpected to get here.
-                self.invalidState()
-            case let .active(state):
-                promise.succeed(state.multiplexer)
-            case let .ready(state):
-                promise.succeed(state.multiplexer)
-            case let .transientFailure(state):
-                // Provide the reason we failed transiently, if we can.
-                let error = state.reason ?? GRPCStatus(
-                  code: .unavailable,
-                  message: "Connection multiplexer requested while backing off"
-                )
-                promise.fail(error)
-            case let .shutdown(state):
-                promise.fail(state.reason)
-            }
-        }
+      case .ready:
+        fulfillMuxPromiseGivenState(promise: muxPromise)
 
-      return self.eventLoop.flatSubmit {
-        let muxPromise: EventLoopPromise<HTTP2StreamMultiplexer> = self.eventLoop.makePromise()
+      case .transientFailure:
+        fulfillMuxPromiseGivenState(promise: muxPromise)
 
-
-        switch self.state {
-        case .idle:
-          self.startConnecting()
-          // We started connecting so we must transition to the `connecting` state.
-          guard case let .connecting(connecting) = self.state else {
-            self.invalidState()
-          }
-          connecting.candidate.whenComplete { _ in fulfillMuxPromiseGivenState(promise: muxPromise) }
-
-        case let .connecting(state):
-            state.candidate.whenComplete { _ in fulfillMuxPromiseGivenState(promise: muxPromise) }
-
-        case .active:
-            fulfillMuxPromiseGivenState(promise: muxPromise)
-
-        case .ready:
-            fulfillMuxPromiseGivenState(promise: muxPromise)
-
-        case .transientFailure:
-            fulfillMuxPromiseGivenState(promise: muxPromise)
-
-        case .shutdown:
-            fulfillMuxPromiseGivenState(promise: muxPromise)
-        }
-
-        self.logger.debug("vending fast-failing multiplexer future", metadata: [
-          "connectivity_state": "\(self.state.label)",
-        ])
-
-        return muxPromise.futureResult
+      case .shutdown:
+        fulfillMuxPromiseGivenState(promise: muxPromise)
       }
+
+      self.logger.debug("vending fast-failing multiplexer future", metadata: [
+        "connectivity_state": "\(self.state.label)",
+      ])
+
+      return muxPromise.futureResult
     }
+  }
 
   /// Shutdown any connection which exists. This is a request from the application.
   internal func shutdown() -> EventLoopFuture<Void> {
@@ -499,7 +502,7 @@ internal class ConnectionManager {
   }
 
   /// The connecting channel became `active`. Must be called on the `EventLoop`.
-    internal func channelActive(channel: Channel, multiplexer: HTTP2StreamMultiplexer) {
+  internal func channelActive(channel: Channel, multiplexer: HTTP2StreamMultiplexer) {
     self.eventLoop.preconditionInEventLoop()
     self.logger.debug("activating connection", metadata: [
       "connectivity_state": "\(self.state.label)",
@@ -507,7 +510,9 @@ internal class ConnectionManager {
 
     switch self.state {
     case let .connecting(connecting):
-      self.state = .active(ConnectedState(from: connecting, candidate: channel, multiplexer: multiplexer))
+      self
+        .state =
+        .active(ConnectedState(from: connecting, candidate: channel, multiplexer: multiplexer))
 
     // Application called shutdown before the channel become active; we should close it.
     case .shutdown:
@@ -590,9 +595,11 @@ internal class ConnectionManager {
         }
         self.logger.debug("scheduling connection attempt", metadata: ["delay": "0"])
         let backoffIterator = self.configuration.connectionBackoff?.makeIterator()
-        self.state = .transientFailure(TransientFailureState(from: ready,
-                                                             scheduled: scheduled,
-                                                             backoffIterator: backoffIterator))
+        self.state = .transientFailure(TransientFailureState(
+          from: ready,
+          scheduled: scheduled,
+          backoffIterator: backoffIterator
+        ))
       }
 
     // This is fine: we expect the channel to become inactive after becoming idle.

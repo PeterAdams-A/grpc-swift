@@ -456,9 +456,9 @@ extension Channel {
         inboundStreamInitializer: nil
       )
     }.flatMap { h2multiplexer in
-        // The multiplexer is passed through the idle handler so it is only reported on
-        // successful channel activation - with happy eyeballs multiple pipelines can
-        // be constructed so it's not safe to report just yet.
+      // The multiplexer is passed through the idle handler so it is only reported on
+      // successful channel activation - with happy eyeballs multiple pipelines can
+      // be constructed so it's not safe to report just yet.
       self.pipeline.handler(type: NIOHTTP2Handler.self).flatMap { http2Handler in
         self.pipeline.addHandlers(
           [
