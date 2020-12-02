@@ -327,7 +327,7 @@ internal class ConnectionManager {
     /// attempt, or if the state is 'idle' returns the future for the next connection attempt.
     ///
     /// Note: if the state is 'transientFailure' or 'shutdown' then a failed future will be returned.
-    internal func getHTTP2MultiplexerOptimistic() -> EventLoopFuture<HTTP2StreamMultiplexer> {
+    private func getHTTP2MultiplexerOptimistic() -> EventLoopFuture<HTTP2StreamMultiplexer> {
         func fulfillMuxPromiseGivenState(promise: EventLoopPromise<HTTP2StreamMultiplexer>) {
             switch self.state {
             case .idle:
