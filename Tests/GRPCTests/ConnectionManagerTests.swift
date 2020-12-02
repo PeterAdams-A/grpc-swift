@@ -827,7 +827,7 @@ extension ConnectionManagerTests {
     XCTAssertThrowsError(try channelMux.wait())
   }
 
-  /* PPA func testDoubleIdle() throws {
+  func testDoubleIdle() throws {
     class CloseDroppingHandler: ChannelOutboundHandler {
       typealias OutboundIn = Any
       func close(context: ChannelHandlerContext, mode: CloseMode,
@@ -856,12 +856,6 @@ extension ConnectionManagerTests {
     // Setup the real channel and activate it.
     let channel = EmbeddedChannel(loop: self.loop)
     let h2mux = HTTP2StreamMultiplexer(mode: .client, channel: channel, inboundStreamInitializer: nil)
-    try channel.pipeline.addHandler(GRPCIdleHandler(
-        mode: .client(manager, h2mux),
-        logger: self.logger,
-        idleTimeout: .minutes(5)
-        )
-    ).wait()
     XCTAssertNoThrow(try channel.pipeline.addHandlers([
       CloseDroppingHandler(),
       GRPCIdleHandler(mode: .client(manager, h2mux), logger: manager.logger, idleTimeout: .minutes(5)),
@@ -896,7 +890,7 @@ extension ConnectionManagerTests {
     //
     // Previously doing this this would fail a precondition.
     self.loop.advanceTime(by: .minutes(5))
-  }*/
+  }
 
   func testForceIdleAfterInactive() throws {
     let channelPromise = self.loop.makePromise(of: Channel.self)
