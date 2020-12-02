@@ -126,7 +126,7 @@ extension ConnectionManagerTests {
     }
 
     // Setup the real channel and activate it.
-    let channel = EmbeddedChannel(handler: nil, loop: self.loop)
+    let channel = EmbeddedChannel(loop: self.loop)
     let h2mux = HTTP2StreamMultiplexer(mode: .client, channel: channel, inboundStreamInitializer: nil)
     _ = channel.pipeline.addHandler(
       GRPCIdleHandler(
@@ -173,7 +173,7 @@ extension ConnectionManagerTests {
       }
 
     // Setup the channel.
-    let channel = EmbeddedChannel(handler: nil, loop: self.loop)
+    let channel = EmbeddedChannel(loop: self.loop)
     let h2mux = HTTP2StreamMultiplexer(mode: .client, channel: channel, inboundStreamInitializer: nil)
     try channel.pipeline.addHandler(
       GRPCIdleHandler(
@@ -228,7 +228,7 @@ extension ConnectionManagerTests {
       }
 
     // Setup the channel.
-    let channel = EmbeddedChannel(handler: nil, loop: self.loop)
+    let channel = EmbeddedChannel(loop: self.loop)
     let h2mux = HTTP2StreamMultiplexer(mode: .client, channel: channel, inboundStreamInitializer: nil)
     try channel.pipeline.addHandler(GRPCIdleHandler(
         mode: .client(manager, h2mux),
@@ -296,7 +296,7 @@ extension ConnectionManagerTests {
       }
 
     // Setup the channel.
-    let channel = EmbeddedChannel(handler: nil, loop: self.loop)
+    let channel = EmbeddedChannel(loop: self.loop)
     let h2mux = HTTP2StreamMultiplexer(mode: .client, channel: channel, inboundStreamInitializer: nil)
     try channel.pipeline.addHandler(GRPCIdleHandler(
         mode: .client(manager, h2mux),
@@ -361,7 +361,7 @@ extension ConnectionManagerTests {
     }
 
     // Setup the actual channel and complete the promise.
-    let channel = EmbeddedChannel(handler: nil, loop: self.loop)
+    let channel = EmbeddedChannel(loop: self.loop)
     let h2mux = HTTP2StreamMultiplexer(mode: .client, channel: channel, inboundStreamInitializer: nil)
     try channel.pipeline.addHandler(GRPCIdleHandler(
         mode: .client(manager, h2mux),
@@ -472,7 +472,7 @@ extension ConnectionManagerTests {
       }
 
     // Prepare the channel
-    let channel = EmbeddedChannel(handler: nil, loop: self.loop)
+    let channel = EmbeddedChannel(loop: self.loop)
     let h2mux = HTTP2StreamMultiplexer(mode: .client, channel: channel, inboundStreamInitializer: nil)
     try channel.pipeline.addHandler(GRPCIdleHandler(
         mode: .client(manager, h2mux),
@@ -513,7 +513,7 @@ extension ConnectionManagerTests {
     XCTAssertNoThrow(try secondShutdown.wait())
   }
 
-  /* PPA func testTransientFailureWhileActive() throws {
+  func testTransientFailureWhileActive() throws {
     var configuration = self.defaultConfiguration
     configuration.connectionBackoff = .oneSecondFixed
 
@@ -540,14 +540,15 @@ extension ConnectionManagerTests {
       }
 
     // Prepare the channel
-    let firstChannel = EmbeddedChannel(
-      handler: GRPCIdleHandler(
-        mode: .client(manager, try readyChannelMux.wait()),
+    let firstChannel = EmbeddedChannel(loop: self.loop)
+    let h2mux = HTTP2StreamMultiplexer(mode: .client, channel: firstChannel, inboundStreamInitializer: nil)
+    try firstChannel.pipeline.addHandler(GRPCIdleHandler(
+        mode: .client(manager, h2mux),
         logger: self.logger,
         idleTimeout: .minutes(5)
-      ),
-      loop: self.loop
-    )
+      )
+    ).wait()
+
     channelPromise.succeed(firstChannel)
     XCTAssertNoThrow(
       try firstChannel.connect(to: SocketAddress(unixDomainSocketPath: "/ignored"))
@@ -578,7 +579,7 @@ extension ConnectionManagerTests {
 
     // The channel never came up: it should be throw.
     XCTAssertThrowsError(try readyChannelMux.wait())
-  } */
+  }
 
   func testTransientFailureWhileReady() throws {
     var configuration = self.defaultConfiguration
@@ -608,7 +609,7 @@ extension ConnectionManagerTests {
       }
 
     // Prepare the first channel
-    let firstChannel = EmbeddedChannel(handler: nil, loop: self.loop)
+    let firstChannel = EmbeddedChannel(loop: self.loop)
     let firstH2mux = HTTP2StreamMultiplexer(mode: .client, channel: firstChannel, inboundStreamInitializer: nil)
     try firstChannel.pipeline.addHandler(GRPCIdleHandler(
         mode: .client(manager, firstH2mux),
@@ -649,7 +650,7 @@ extension ConnectionManagerTests {
     }
 
     // Prepare the second channel
-    let secondChannel = EmbeddedChannel(handler: nil, loop: self.loop)
+    let secondChannel = EmbeddedChannel(loop: self.loop)
     let secondH2mux = HTTP2StreamMultiplexer(mode: .client, channel: secondChannel, inboundStreamInitializer: nil)
     try secondChannel.pipeline.addHandler(GRPCIdleHandler(
         mode: .client(manager, secondH2mux),
@@ -694,7 +695,7 @@ extension ConnectionManagerTests {
       }
 
     // Setup the channel.
-    let channel = EmbeddedChannel(handler: nil, loop: self.loop)
+    let channel = EmbeddedChannel(loop: self.loop)
     let h2mux = HTTP2StreamMultiplexer(mode: .client, channel: channel, inboundStreamInitializer: nil)
     try channel.pipeline.addHandler(GRPCIdleHandler(
         mode: .client(manager, h2mux),
