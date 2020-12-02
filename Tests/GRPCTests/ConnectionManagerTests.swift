@@ -192,7 +192,7 @@ extension ConnectionManagerTests {
     try self.waitForStateChange(from: .connecting, to: .ready) {
       let frame = HTTP2Frame(streamID: .rootStream, payload: .settings(.settings([])))
       XCTAssertNoThrow(try channel.writeInbound(frame))
-      // Wait for the channel, it _must_ be ready now.
+      // Wait for the multiplexer, it _must_ be ready now.
       XCTAssertNoThrow(try readyChannelMux.wait())
     }
 
@@ -351,7 +351,7 @@ extension ConnectionManagerTests {
       return readyChannelMux
     }
 
-    // Get a channel mux from the manager: it is a future for the same channel.
+    // Get a channel mux from the manager - it is a future for the one we made earlier.
     let anotherReadyChannelMux = manager.getHTTP2Multiplexer()
     self.loop.run()
 
@@ -416,7 +416,7 @@ extension ConnectionManagerTests {
       XCTAssertNoThrow(try shutdown.wait())
     }
 
-    // The channel we were requesting should fail.
+    // The multiplexer we were requesting should fail.
     XCTAssertThrowsError(try readyChannelMux.wait())
 
     // We still have our channel promise to fulfil: if it succeeds then it too should be closed.
@@ -770,7 +770,7 @@ extension ConnectionManagerTests {
       self.loop.run()
     }
 
-    // We're connecting: get an optimistic channel multiplexer.
+    // We're connecting: get an optimistic channel multiplexer - this was selected in config.
     let optimisticChannelMux = manager.getHTTP2Multiplexer()
     self.loop.run()
 
@@ -798,7 +798,7 @@ extension ConnectionManagerTests {
       self.loop.run()
     }
 
-    // Now we're sitting in transient failure. Get a channel mux optimistically.
+    // Now we're sitting in transient failure. Get a channel mux optimistically - selected in config.
     let optimisticChannelMux = manager.getHTTP2Multiplexer()
     self.loop.run()
 

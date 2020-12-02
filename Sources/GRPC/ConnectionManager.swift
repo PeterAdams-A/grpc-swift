@@ -278,6 +278,9 @@ internal class ConnectionManager {
     self.logger = logger
   }
 
+    /// Get the multiplexer from the underlying channel handling gRPC calls.
+    /// if the `ConnectionManager` was configured to be `fastFailure` this will have
+    /// one chance to connect - if not reconnections are managed here.
     internal func getHTTP2Multiplexer() -> EventLoopFuture<HTTP2StreamMultiplexer> {
         switch self.configuration.callStartBehavior.wrapped {
       case .waitsForConnectivity:
@@ -288,6 +291,7 @@ internal class ConnectionManager {
     }
 
     /// Returns a future for the multiplexer which succeeded when the channel is connected.
+    /// Reconnects are handled if necessary.
     private func getHTTP2MultiplexerPatient() -> EventLoopFuture<HTTP2StreamMultiplexer> {
         let multiplexer: EventLoopFuture<HTTP2StreamMultiplexer>
 
@@ -411,7 +415,7 @@ internal class ConnectionManager {
         self.state = .shutdown(shutdown)
 
         // Fail the ready channel mux promise: we're shutting down so even if we manage to successfully
-        // connect the application shouldn't should have access to the channel.
+        // connect the application shouldn't should have access to the channel or multiplexer.
         state.readyChannelMuxPromise.fail(GRPCStatus(code: .unavailable, message: nil))
         // In case we do successfully connect, close immediately.
         state.candidate.whenSuccess {
@@ -425,7 +429,7 @@ internal class ConnectionManager {
         self.state = .shutdown(shutdown)
 
         // Fail the ready channel mux promise: we're shutting down so even if we manage to successfully
-        // connect the application shouldn't should have access to the channel.
+        // connect the application shouldn't should have access to the channel or multiplexer.
         state.readyChannelMuxPromise.fail(GRPCStatus(code: .unavailable, message: nil))
         // We have a channel, close it.
         state.candidate.close(mode: .all, promise: nil)
